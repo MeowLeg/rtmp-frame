@@ -1,11 +1,12 @@
 
 use super::*;
 
-pub fn swim_predict(
-    m: &str,
-    im: &PathBuf
-) -> Result<String> {
-    Ok(predict(m, im, "swim")?)
+const YOLOV8_CLASS_LABELS: [&str; 1] = [
+    "person",
+];
+
+pub fn swim_predict(m: &str, im: &PathBuf) -> Result<String> {
+    Ok(predict(m, im, "swim", YOLOV8_CLASS_LABELS)?)
 }
 
 

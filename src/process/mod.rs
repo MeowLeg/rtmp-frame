@@ -82,10 +82,6 @@ pub fn init() -> ort::Result<()> {
 	Ok(())
 }
 
-pub const YOLOV8_CLASS_LABELS: [&str; 1] = [
-    "person",
-];
-
 #[derive(Debug, Clone, Copy)]
 pub struct BoundingBox {
 	x1: f32,
@@ -102,7 +98,7 @@ fn get_current_str() -> String {
 }
 
 #[allow(unused)]
-pub fn predict(model_path: &str, im_path: &PathBuf, tag: &str) -> Result<String> {
+pub fn predict(model_path: &str, im_path: &PathBuf, tag: &str, labels: &[&str]) -> Result<String> {
     init()?;
 
     let nm = format!("{}_{}",
@@ -175,7 +171,7 @@ pub fn predict(model_path: &str, im_path: &PathBuf, tag: &str) -> Result<String>
 		if prob < 0.5 {
 			continue;
 		}
-		let label = YOLOV8_CLASS_LABELS[class_id];
+		let label = labels[class_id];
 		let xc = row[0] / 640. * (w as f32);
 		let yc = row[1] / 640. * (h as f32);
 		let w = row[2] / 640. * (w as f32);
