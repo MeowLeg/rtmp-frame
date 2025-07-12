@@ -1,0 +1,50 @@
+[package]
+name = "rtmp-frame"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ffmpeg-next = "7.1.0"
+image = "0.25"
+time = { version = "0.3", features = ["formatting"] }
+clap = { version = "*", features = ["derive"]}
+anyhow = "*"
+ort = "2.0.0-rc.10"
+ndarray = "0.16"
+ort-candle = { version = "*", optional = true }
+ort-tract = { version = "*", optional = true }
+chrono = "*"
+# rusttype = "0.9"
+ab_glyph = "*"
+imageproc = "0.25"
+toml = "*"
+serde = { version = "*", features = ["derive"] }
+
+[build-dependencies]
+onnxruntime-sys = "^0.0.14"
+
+[features]
+load-dynamic = [ "ort/load-dynamic" ]
+
+cuda = [ "ort/cuda" ]
+tensorrt = [ "ort/tensorrt" ]
+openvino = [ "ort/openvino" ]
+onednn = [ "ort/onednn" ]
+directml = [ "ort/directml" ]
+nnapi = [ "ort/nnapi" ]
+coreml = [ "ort/coreml" ]
+xnnpack = [ "ort/xnnpack" ]
+rocm = [ "ort/rocm" ]
+acl = [ "ort/acl" ]
+armnn = [ "ort/armnn" ]
+tvm = [ "ort/tvm" ]
+migraphx = [ "ort/migraphx" ]
+rknpu = [ "ort/rknpu" ]
+vitis = [ "ort/vitis" ]
+cann = [ "ort/cann" ]
+qnn = [ "ort/qnn" ]
+webgpu = [ "ort/webgpu" ]
+azure = [ "ort/azure" ]
+
+backend-candle = [ "ort/alternative-backend", "dep:ort-candle" ]
+backend-tract = [ "ort/alternative-backend", "dep:ort-tract" ]
