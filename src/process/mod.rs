@@ -10,7 +10,6 @@ use ndarray::{
 };
 use ort::{
 	inputs,
-	session::Session,
 	value::TensorRef
 };
 use ab_glyph::{
@@ -21,7 +20,7 @@ use imageproc::drawing::{
 	draw_text_mut,
 	draw_hollow_rect_mut,
 };
-use std::{fs::DirEntry, path::PathBuf};
+use std::path::PathBuf;
 use chrono::Local;
 
 
@@ -98,7 +97,7 @@ fn get_current_str() -> String {
 }
 
 #[allow(unused)]
-pub fn predict(model_path: &str, im_path: &PathBuf, tag: &str, labels: &[&str]) -> Result<String> {
+pub fn predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[&str]) -> Result<String> {
     init()?;
 
     let nm = format!("{}_{}",
@@ -110,14 +109,14 @@ pub fn predict(model_path: &str, im_path: &PathBuf, tag: &str, labels: &[&str]) 
 		tag
 	);
 
-    let mut model= match Session::builder()?
-        .commit_from_file(model_path) {
-            Ok(m) => m,
-            Err(e) => {
-                println!("Error loading model: {}", e);
-                return Err(e.into());
-            }
-        };
+    // let mut model= match Session::builder()?
+    //     .commit_from_file(model_path) {
+    //         Ok(m) => m,
+    //         Err(e) => {
+    //             println!("Error loading model: {}", e);
+    //             return Err(e.into());
+    //         }
+    //     };
 
     let img = match image::open(&im_path) {
         Ok(img) => img,

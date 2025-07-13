@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use std::{
-    fs::{read, File},
-    io::Read, path::PathBuf,
+    fs::File,
+    io::Read,
+    path::PathBuf,
 };
 use ffmpeg_next::{
     codec, format, frame, media, software::scaling
@@ -9,6 +10,7 @@ use ffmpeg_next::{
 use std::time::Instant;
 use image::{Rgb, ImageBuffer};
 use serde::Deserialize;
+use ort::session::Session;
 
 mod process;
 
@@ -173,7 +175,9 @@ fn process_frame(
 fn predicts(cfg: &Config, f: &PathBuf) -> Result<Vec<String>> {
     let mut predicts: Vec<String> = vec![];
     if let Some(m) = &cfg.swim {
-        let prediction = process::swim::swim_predict(&m, f)?;
+        let mut m = Session::builder()?
+            .commit_from_file(m)?;
+        let prediction = process::swim::swim_predict(&mut m, f)?;
         predicts.push(prediction);
     }
 
