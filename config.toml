@@ -1,0 +1,9 @@
+port = 4023
+redis_url = "redis://127.0.0.1:6379"
+dump_path = "./dump"
+
+[[predict]]
+tag = "swim"
+model = "./model/swim_yolo8_nano.onnx"
+pipe = "xinlan_predict_0001_swim"
+label = ["person",]

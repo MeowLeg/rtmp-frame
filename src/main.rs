@@ -1,4 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::{
+    Context, Result,
+    anyhow,
+};
 use std::{
     fs::File,
     io::Read,
@@ -11,14 +14,77 @@ use std::time::Instant;
 use image::{Rgb, ImageBuffer};
 use serde::Deserialize;
 use ort::session::Session;
+use axum::{
+    Extension,
+    routing::{
+        Router,
+        get,
+        post,
+    }
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use clap::{
+    Parser, Subcommand
+};
+use chrono::Local;
+use redis::{
+    AsyncCommands,
+    Client,
+    Pipeline,
+};
 
-mod process;
+mod predict;
+mod stream;
+mod handler;
+use handler::*;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub swim: Option<String>,
-    pub fire: Option<String>,
+    pub port: u32,
+    pub redis_url: String,
+    pub dump_path: String,
+    pub predict: Vec<Predict>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Predict {
+    pub tag: String,
+    pub model: String,
+    pub pipe: String,
+    pub label: Vec<String>,
+}
+
+#[derive(Parser)]
+#[command(version, about, long_about=None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    /// run edge for incrment of duration or out pv
+    #[arg(short, long)]
+    url: Option<String>,
+
+    /// url md5 value
+    #[arg(short, long)]
+    md5: Option<String>,
+
+    /// config file
+    #[arg(short, long, default_value="./config.toml")]
+    config: String,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// run as daemon for monitor
+    Web,
+
+    // predict img from redis pipe
+    Predict,
+}
+
 
 pub fn read_from_toml(f: &str) -> Result<Config> {
     let mut file = File::open(f)?;
@@ -28,158 +94,51 @@ pub fn read_from_toml(f: &str) -> Result<Config> {
     Ok(config)
 }
 
-fn main() -> Result<()> {
-    let cfg = read_from_toml("./config.toml")?;
-    // 解析命令行参数
-    // let rtmp_url = env::args().nth(1).expect("请提供RTMP URL");
-    let rtmp_url = "rtmp://play-sh13.quklive.com/live/1699001836208185?auth_key=2067469022-47d1a627576a4ecf9d5c2068f274f5b0-0-c805cc1b4e4c9e4f51705d2304687f35";
+async fn web_svr(cfg: &Arc<Config>) -> Result<()> {
+    let app = Router::new()
+        .route("/", get(async || "hello, msg data!".to_string()))
+        .route("/new_stream", get(new_stream::NewStream::handle_get))
+        .layer(Extension(Arc::clone(&cfg)));
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port)).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}
 
-    // 初始化FFmpeg
-    ffmpeg_next::init().context("FFmpeg初始化失败")?;
+#[allow(unused)]
+pub fn get_current_str(concat: Option<&str>) -> String {
+    let now = Local::now();
+    let fmt = match concat {
+        Some(c) => &format!("%Y{}%m{}%d{}%H{}%M{}%S", c, c, c, c, c),
+        None => "%Y-%m-%d %H:%M:%S",
+    };
+    let today = now.format(fmt).to_string();
+    today
+}
 
-    // 打开RTMP输入流
-    let mut ictx = format::input(&rtmp_url)
-        .context("无法打开RTMP流")?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cfg = Arc::new(read_from_toml("./config.toml")?);
+    let cli = Cli::parse();
+    let rds = Client::open(cfg.redis_url.clone())?;
 
-    // 查找视频流
-    let video_stream_index = ictx
-        .streams()
-        .best(media::Type::Video)
-        .ok_or_else(|| anyhow::anyhow!("找不到视频流"))?
-        .index();
+    match cli.command {
+        Some(Commands::Web) => {
+            return web_svr(&cfg).await;
+        },
+        Some(Commands::Predict) => {
+            return predict::predict(&cfg, &rds).await;
+            todo!("应该在这里启动一系列后台运行的服务，因此不应该已子命令的形式出现");
+        },
+        None => {}
+    }
 
-    // 获取视频流
-    let stream = ictx
-        .streams()
-        .find(|s| s.index() == video_stream_index)
-        .ok_or_else(|| anyhow::anyhow!("无法获取指定索引的视频流"))?;
-
-    // 创建解码器上下文
-    let dctx = codec::context::Context::from_parameters(stream.parameters())
-        .context("创建解码器上下文失败")?;
-    // 创建缩放上下文，用于将YUV帧转换为RGB
-
-    // 帧计数器和计时器
-    let mut frame_count = 0;
-    let start_time = Instant::now();
-
-    let mut v_dctx = dctx.decoder().video()?;
-
-    let mut scaler = scaling::Context::get(
-        v_dctx.format(),
-        v_dctx.width(),
-        v_dctx.height(),
-        ffmpeg_next::format::Pixel::RGB24,
-        v_dctx.width(),
-        v_dctx.height(),
-        scaling::Flags::BILINEAR,
-    )
-    .context("无法创建缩放上下文")?;
-
-    // 处理输入包
-    for (stream, packet) in ictx.packets() {
-        if stream.index() == video_stream_index {
-            // 将包发送到解码器
-            v_dctx.send_packet(&packet).context("发送数据包失败")?;
-
-            // 从解码器接收帧
-            let mut decoded_frame = frame::Video::empty();
-            while let Ok(()) = v_dctx.receive_frame(&mut decoded_frame) {
-                frame_count += 1;
-
-                // 在这里处理解码后的帧
-                let width = decoded_frame.width();
-                let height = decoded_frame.height();
-                let format = decoded_frame.format();
-                
-                // 示例：打印帧信息
-                if frame_count % 30 == 0 { // 每30帧打印一次
-                    let elapsed = start_time.elapsed().as_secs_f64();
-                    println!("已处理 {} 帧 | 帧率: {:.2} FPS | 尺寸: {}x{} | 格式: {:?}",
-                        frame_count, 
-                        frame_count as f64 / elapsed,
-                        width, height, format);
-                }
-
-                // 自定义帧处理逻辑...
-                process_frame(&mut scaler, &decoded_frame, frame_count, &cfg)?;
+    if let Some(url) = cli.url {
+        if let Some(md5_val) = cli.md5 {
+            if md5_val == format!("{:x}", md5::compute(url.as_bytes())) {
+                return stream::stream(&url, Arc::clone(&cfg), &rds).await;
             }
         }
     }
 
-    // 冲洗解码器
-    v_dctx.flush();
-
-    let elapsed = start_time.elapsed().as_secs_f64();
-    println!("处理完成: 在 {:.2} 秒内处理了 {} 帧 | 平均帧率: {:.2} FPS",
-        elapsed, frame_count, frame_count as f64 / elapsed);
-
     Ok(())
-}
-
-// 自定义帧处理函数（示例）
-fn process_frame(
-    scaler: &mut scaling::Context,
-    frame: &frame::Video,
-    frame_count: u32,
-    cfg: &Config
-) -> Result<Vec<String>> {
-    // 这里可以添加自定义处理逻辑
-    // 例如：转换格式、分析内容、保存为图片等
-    
-    // 示例：获取帧的基本信息
-    let width = frame.width() as u32;
-    let height = frame.height() as u32;
-    // let format = frame.format();
-    
-    // 示例：获取YUV数据
-    // let y_data = frame.data(0);  // Y分量
-    // let u_data = frame.data(1);  // U分量
-    // let v_data = frame.data(2);  // V分量
-    
-    // 实际应用中，可以在这里添加更复杂的处理逻辑
-    // println!("data: width: {} height: {} format: {:?}", width, height, format);
-    // println!("data: y_data: {:?}", y_data);
-    // println!("data: u_data: {:?}", u_data);
-    // println!("data: v_data: {:?}", v_data);
-    // 转换帧格式为RGB
-
-    let mut rgb_frame = frame::Video::empty();
-    scaler.run(&frame, &mut rgb_frame)
-        .context("帧格式转换失败")?;
-
-    let mut image_buffer = ImageBuffer::<Rgb<u8>, Vec<u8>>::new(width, height);
-
-    // 复制像素数据到图像缓冲区
-    let data = rgb_frame.data(0);
-    let stride = rgb_frame.stride(0);
-
-    for y in 0..height {
-        for x in 0..width {
-            let offset = (y as usize * stride) + (x as usize * 3);
-            let r = data[offset];
-            let g = data[offset + 1];
-            let b = data[offset + 2];
-            image_buffer.put_pixel(x, y, Rgb([r, g, b]));
-        }
-    }
-    
-    let filepath = format!("frame_{}.jpg", frame_count);
-    image_buffer
-        .save(&filepath)
-        .context(format!("保存图像失败: {:?}", &filepath))?;
-
-    predicts(cfg, &PathBuf::from(&filepath))
-}
-
-fn predicts(cfg: &Config, f: &PathBuf) -> Result<Vec<String>> {
-    let mut predicts: Vec<String> = vec![];
-    if let Some(m) = &cfg.swim {
-        let mut m = Session::builder()?
-            .commit_from_file(m)?;
-        let prediction = process::swim::swim_predict(&mut m, f)?;
-        predicts.push(prediction);
-    }
-
-    Ok(predicts)
 }
