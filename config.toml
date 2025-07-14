@@ -1,9 +1,16 @@
 port = 4023
-redis_url = "redis://127.0.0.1:6379"
+redis_svr_url = "redis://127.0.0.1:6379"
 dump_path = "./dump"
+predict_worker_num = 5
+notify_svr_url = "http://127.0.0.1:4023/"  # 这是一个post接口
+notify_timeout = 5
+redis_stream_tag = "xinlan_predict_0001_stream"  # 用于存储流的信息
+
 
 [[predict]]
-tag = "swim"
+tag = "swim"  # 通知数据结构等的需要
+title = "游泳警告"  # 通知数据结构需要
+content = ""  # 通知数据结构需要
 model = "./model/swim_yolo8_nano.onnx"
 pipe = "xinlan_predict_0001_swim"
 label = ["person",]

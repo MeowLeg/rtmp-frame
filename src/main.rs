@@ -5,27 +5,28 @@ use anyhow::{
 use std::{
     fs::File,
     io::Read,
-    path::PathBuf,
+    path::{
+        Path, PathBuf,
+    }
 };
 use ffmpeg_next::{
     codec, format, frame, media, software::scaling
 };
 use std::time::Instant;
 use image::{Rgb, ImageBuffer};
-use serde::Deserialize;
+use serde::{
+    Serialize,
+    Deserialize,
+};
 use ort::session::Session;
 use axum::{
     Extension,
     routing::{
         Router,
         get,
-        post,
     }
 };
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::Arc;
 use clap::{
     Parser, Subcommand
 };
@@ -33,8 +34,8 @@ use chrono::Local;
 use redis::{
     AsyncCommands,
     Client,
-    Pipeline,
 };
+use std::process::Command;
 
 mod predict;
 mod stream;
@@ -44,14 +45,20 @@ use handler::*;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub port: u32,
-    pub redis_url: String,
+    pub redis_svr_url: String,
     pub dump_path: String,
+    pub predict_worker_num: u32,
+    pub notify_svr_url: String,
+    pub notify_timeout: u64,
+    pub redis_stream_tag: String,
     pub predict: Vec<Predict>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Predict {
     pub tag: String,
+    pub title: String,
+    pub content: String,
     pub model: String,
     pub pipe: String,
     pub label: Vec<String>,
@@ -81,7 +88,7 @@ enum Commands {
     /// run as daemon for monitor
     Web,
 
-    // predict img from redis pipe
+    /// 预测子进程应与Web服务在一起，此处保留单独命令，用于方便增减
     Predict,
 }
 
@@ -98,7 +105,7 @@ async fn web_svr(cfg: &Arc<Config>) -> Result<()> {
     let app = Router::new()
         .route("/", get(async || "hello, msg data!".to_string()))
         .route("/new_stream", get(new_stream::NewStream::handle_get))
-        .layer(Extension(Arc::clone(&cfg)));
+        .layer(Extension(Arc::clone(cfg)));
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port)).await?;
     axum::serve(listener, app).await?;
     Ok(())
@@ -108,37 +115,38 @@ async fn web_svr(cfg: &Arc<Config>) -> Result<()> {
 pub fn get_current_str(concat: Option<&str>) -> String {
     let now = Local::now();
     let fmt = match concat {
-        Some(c) => &format!("%Y{}%m{}%d{}%H{}%M{}%S", c, c, c, c, c),
+        Some(c) => &format!("%Y{c}%m{c}%d{c}%H{c}%M{c}%S"),
         None => "%Y-%m-%d %H:%M:%S",
     };
-    let today = now.format(fmt).to_string();
-    today
+    now.format(fmt).to_string()
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cfg = Arc::new(read_from_toml("./config.toml")?);
     let cli = Cli::parse();
-    let rds = Client::open(cfg.redis_url.clone())?;
+    let rds = Client::open(cfg.redis_svr_url.clone())?;
 
     match cli.command {
         Some(Commands::Web) => {
+            for _ in 0 .. cfg.predict_worker_num {
+                let _ = Command::new("./rtmp-frame")
+                    .arg("predict")
+                    .spawn()?;
+            }
             return web_svr(&cfg).await;
         },
         Some(Commands::Predict) => {
             return predict::predict(&cfg, &rds).await;
-            todo!("应该在这里启动一系列后台运行的服务，因此不应该已子命令的形式出现");
         },
         None => {}
     }
 
-    if let Some(url) = cli.url {
-        if let Some(md5_val) = cli.md5 {
-            if md5_val == format!("{:x}", md5::compute(url.as_bytes())) {
-                return stream::stream(&url, Arc::clone(&cfg), &rds).await;
-            }
+    if let Some(url) = cli.url 
+        && let Some(md5_val) = cli.md5
+        && md5_val == format!("{:x}", md5::compute(url.as_bytes())) {
+            return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
         }
-    }
 
     Ok(())
 }

@@ -1,5 +1,10 @@
-use super::*;
+use crate::handler::new_stream::NewStreamReq;
 
+use super::*;
+use serde_json::{
+    Value,
+    json
+};
 use image::{
     GenericImageView,
 };
@@ -21,10 +26,6 @@ use imageproc::drawing::{
 	draw_hollow_rect_mut,
 };
 use std::path::PathBuf;
-use chrono::Local;
-
-
-#[allow(unused)]
 use ort::execution_providers::*;
 
 #[allow(unused)]
@@ -91,28 +92,10 @@ pub struct BoundingBox {
 fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]) -> Result<String> {
     init()?;
 
-    let nm = format!("{}_{}",
-		im_path 
-			.file_stem()
-			.ok_or(anyhow::anyhow!("Failed to get file stem"))?
-			.to_string_lossy()
-			.to_string(),
-		tag
-	);
-
-    // let mut model= match Session::builder()?
-    //     .commit_from_file(model_path) {
-    //         Ok(m) => m,
-    //         Err(e) => {
-    //             println!("Error loading model: {}", e);
-    //             return Err(e.into());
-    //         }
-    //     };
-
-    let img = match image::open(&im_path) {
+    let img = match image::open(im_path) {
         Ok(img) => img,
         Err(e) => {
-            println!("Error opening image: {}", e);
+            println!("Error opening image: {e}");
             return Err(e.into());
         }
     };
@@ -135,7 +118,7 @@ fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]
     let input_values = match TensorRef::from_array_view(&input) {
         Ok(values) => values,
         Err(e) => {
-            println!("Error converting input to TensorRef: {}", e);
+            println!("Error converting input to TensorRef: {e}");
             return Err(e.into());
         }
     };
@@ -177,25 +160,25 @@ fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]
 			label,
 			prob
 		));
-        println!("class_id: {}, prob: {}, label: {}, boxes: {:?}", class_id, prob, label, boxes);
+        // println!("class_id: {}, prob: {}, label: {}, boxes: {:?}", class_id, prob, label, boxes);
 	}
     boxes.sort_by(|box1, box2| box2.2.total_cmp(&box1.2));
 
     println!("Detected {} objects:", boxes.len());
-    if !boxes.is_empty() || boxes.len() > 0 {
-        let _ = visualize_detections(&im_path, boxes, &nm)?;
+    if !boxes.is_empty() {
+        return visualize_detections(im_path, boxes, tag);
     }
 
-    Ok(nm.to_string())
+    Err(anyhow!("no detect"))
 }
 
 #[allow(unused)]
-fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32)>, nm: &str) -> Result<()> {
+fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32)>, tag: &str) -> Result<String> {
     // Load the original image
     let mut img = image::open(image_path)?.to_rgb8();
 
     let font = FontRef::try_from_slice(include_bytes!("../../font/Deng.ttf"))?;
-    let scale = PxScale { x: 20.0 as f32, y: 20.0 as f32 };
+    let scale = PxScale { x: 20.0_f32, y: 20.0_f32 };
 
     for (bbox, label, prob) in boxes {
         // Draw bounding box
@@ -208,7 +191,7 @@ fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32
         );
 
         // Draw label and probability
-        let text = format!("{} ({:.2})", label, prob);
+        let text = format!("{label} ({prob:.2})");
         draw_text_mut(
             &mut img, 
             Rgb([255, 255, 255]), 
@@ -221,11 +204,41 @@ fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32
     }
 
     // Save the image with visualized detections
-    let output_path = image_path.with_file_name(format!("{}_out.jpg", nm));
+    let output_path = image_path.with_file_name(
+        format!("{}_{}_out.jpg", 
+            image_path 
+                .file_stem()
+                .ok_or(anyhow::anyhow!("Failed to get file stem"))?
+                .to_string_lossy(),
+            tag
+        )
+    );
     img.save(&output_path)?;
 
-    println!("Visualized detections saved to {:?}", output_path);
-    Ok(())
+    // println!("Visualized detections saved to {:?}", output_path);
+    Ok(output_path.display().to_string())
+}
+
+#[derive(Debug, Serialize)]
+struct NotifyData {
+    alarm_uuid: String,
+    title: String,
+    content: String,
+    alarm_type: String,
+    #[serde(rename="dateTime")]
+    date_time: String,
+    #[serde(rename="mediaUrl")]
+    media_url: Vec<String>,
+    #[serde(rename="videoUrl")]
+    video_url: Vec<String>,
+    organization_uuid: String,
+    project_uuid: String,
+    rtmp: String,
+}
+
+fn get_uuid() -> String {
+    let u = uuid::Uuid::new_v4();
+    format!("{u}").split("-").collect::<String>()
 }
 
 pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
@@ -233,14 +246,44 @@ pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
     loop {
         for p in cfg.predict.iter() {
             let f: String = con.rpop(&p.pipe, None).await?;
+            let md5_val = f.split("_").next().ok_or(anyhow!("can not get md5 val"))?;
+            let data: String = con.get(
+                format!("{}_{}", &cfg.redis_stream_tag, md5_val)
+            ).await?;
+            let stream_info: NewStreamReq = serde_json::from_str(&data)?;
             let mut m = Session::builder()?
                 .with_execution_providers([CUDAExecutionProvider::default().build()])?
                 .commit_from_file(&p.model)?;
-            _predict(&mut m, &PathBuf::from(f), &p.tag, &p.label)?;
-            todo!("需要图片名发送给某个服务");
+            let output = _predict(&mut m, &PathBuf::from(f), &p.tag, &p.label)?;
+            let _ = _notify(&cfg.notify_svr_url, json!(NotifyData {
+                alarm_uuid: get_uuid(),
+                title: p.title.clone(),
+                content: p.content.clone(),
+                alarm_type: p.tag.clone(),
+                date_time: get_current_str(None),
+                media_url: vec![output],  // todo
+                video_url: vec![],
+                organization_uuid: stream_info.organization_uuid.clone().unwrap_or("".into()),
+                project_uuid: stream_info.project_uuid.clone().unwrap_or("".into()),
+                rtmp: stream_info.stream_url.clone()
+            }), cfg.notify_timeout).await;
+
+            todo!("需要将本地文件名转为http访问");
         }
     }
 }
+
+async fn _notify(sms_server_url: &str, payload: Value, timeout: u64) -> Result<()> {
+    let cli = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout))
+        .build()?;
+    let _resp = cli.post(sms_server_url)
+        .json(&payload)
+        .send()
+        .await?;
+    Ok(())
+}
+
 
 
 #[cfg(test)]

@@ -27,13 +27,13 @@ http = "*"
 md5 = "*"
 sysinfo = "0.35.2"
 redis = { version = "0.25", features = ["tokio-comp"]}
+uuid = { version = "1.7.0", features = ["v4", "fast-rng", "macro-diagnostics"]}
 
 [build-dependencies]
 onnxruntime-sys = "^0.0.14"
 
 [features]
 load-dynamic = [ "ort/load-dynamic" ]
-
 cuda = [ "ort/cuda" ]
 tensorrt = [ "ort/tensorrt" ]
 openvino = [ "ort/openvino" ]
@@ -53,7 +53,6 @@ cann = [ "ort/cann" ]
 qnn = [ "ort/qnn" ]
 webgpu = [ "ort/webgpu" ]
 azure = [ "ort/azure" ]
-
 backend-candle = [ "ort/alternative-backend", "dep:ort-candle" ]
 backend-tract = [ "ort/alternative-backend", "dep:ort-tract" ]
 

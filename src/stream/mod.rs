@@ -1,10 +1,7 @@
-use std::path::Path;
-
-use ort::execution_providers::CUDAExecutionProvider;
-
 use super::*;
 
-pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client) -> Result<()> {
+pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &str) -> Result<()> {
+
     // 初始化FFmpeg
     ffmpeg_next::init().context("FFmpeg初始化失败")?;
 
@@ -31,7 +28,7 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client) -> Result<()
     // 创建缩放上下文，用于将YUV帧转换为RGB
 
     // 帧计数器和计时器
-    let mut frame_count = 0;
+    let mut frame_count: u32 = 0;
     let start_time = Instant::now();
 
     let mut v_dctx = dctx.decoder().video()?;
@@ -64,7 +61,7 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client) -> Result<()
                 let format = decoded_frame.format();
                 
                 // 示例：打印帧信息
-                if frame_count % 30 == 0 { // 每30帧打印一次
+                if frame_count.is_multiple_of(30) { // 每30帧打印一次
                     let elapsed = start_time.elapsed().as_secs_f64();
                     println!("已处理 {} 帧 | 帧率: {:.2} FPS | 尺寸: {}x{} | 格式: {:?}",
                         frame_count, 
@@ -73,7 +70,7 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client) -> Result<()
                 }
 
                 // 自定义帧处理逻辑...
-                process_frame(&mut scaler, &decoded_frame, frame_count, &cfg, rds).await?;
+                process_frame(&mut scaler, &decoded_frame, frame_count, &cfg, rds, md5_val).await?;
             }
         }
     }
@@ -94,14 +91,14 @@ async fn process_frame(
     frame_count: u32,
     cfg: &Config,
     rds: &Client,
-// ) -> Result<Vec<String>> {
+    md5_val: &str,
 ) -> Result<()> {
     // 获取帧的基本信息
-    let width = frame.width() as u32;
-    let height = frame.height() as u32;
+    let width = frame.width();
+    let height = frame.height();
 
     let mut rgb_frame = frame::Video::empty();
-    scaler.run(&frame, &mut rgb_frame)
+    scaler.run(frame, &mut rgb_frame)
         .context("帧格式转换失败")?;
 
     let mut image_buffer = ImageBuffer::<Rgb<u8>, Vec<u8>>::new(width, height);
@@ -121,7 +118,7 @@ async fn process_frame(
     }
     
     let pf = PathBuf::from(&cfg.dump_path)
-        .join(format!("frame_{}_{}.jpg", get_current_str(Some("_")), frame_count));
+        .join(format!("{}_{}_{}.jpg", md5_val, get_current_str(Some("")), frame_count));
     let file_path = pf.display().to_string();
     image_buffer
         .save(&pf)
@@ -131,7 +128,7 @@ async fn process_frame(
     into_redis_pipe(cfg, &pf, rds).await
 }
 
-async fn into_redis_pipe(cfg: &Config, f: &PathBuf, rds: &Client) -> Result<()> {
+async fn into_redis_pipe(cfg: &Config, f: &Path, rds: &Client) -> Result<()> {
     let mut con = rds.get_multiplexed_async_connection().await?;
     for p in cfg.predict.iter() {
         let _ = con.lpush::<_, String, String>(

@@ -19,11 +19,6 @@ use serde_json::{
     json
 };
 use http::HeaderMap;
-use redis::{
-    AsyncCommands,
-    Client,
-    Pipeline,
-};
 
 #[allow(dead_code)]
 pub trait ExecSql<T> {
@@ -44,6 +39,14 @@ pub trait ExecSql<T> {
 
     async fn handle_get(
         _cfg: Extension<Arc<Config>>,
+        _prms: Option<Query<T>>
+    ) -> Result<Json<Value>, WebErr> {
+        Ok(Json(json!({})))
+    }
+
+    async fn handle_get_with_redis(
+        _cfg: Extension<Arc<Config>>,
+        _redis: Extension<Arc<Client>>,
         _prms: Option<Query<T>>
     ) -> Result<Json<Value>, WebErr> {
         Ok(Json(json!({})))
