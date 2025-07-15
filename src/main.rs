@@ -2,17 +2,20 @@ use anyhow::{
     Context, Result,
     anyhow,
 };
+use tower_http::services::ServeDir;
 use std::{
     fs::File,
     io::Read,
     path::{
         Path, PathBuf,
-    }
+    },
+    time::Instant,
+    sync::Arc,
+    process::Command,
 };
 use ffmpeg_next::{
     codec, format, frame, media, software::scaling
 };
-use std::time::Instant;
 use image::{Rgb, ImageBuffer};
 use serde::{
     Serialize,
@@ -26,7 +29,6 @@ use axum::{
         get,
     }
 };
-use std::sync::Arc;
 use clap::{
     Parser, Subcommand
 };
@@ -35,7 +37,6 @@ use redis::{
     AsyncCommands,
     Client,
 };
-use std::process::Command;
 
 mod predict;
 mod stream;
@@ -51,6 +52,8 @@ pub struct Config {
     pub notify_svr_url: String,
     pub notify_timeout: u64,
     pub redis_stream_tag: String,
+    pub static_url: String,
+    pub svr_root_url: String,
     pub predict: Vec<Predict>,
 }
 
@@ -92,7 +95,6 @@ enum Commands {
     Predict,
 }
 
-
 pub fn read_from_toml(f: &str) -> Result<Config> {
     let mut file = File::open(f)?;
     let mut s = String::new();
@@ -103,6 +105,7 @@ pub fn read_from_toml(f: &str) -> Result<Config> {
 
 async fn web_svr(cfg: &Arc<Config>) -> Result<()> {
     let app = Router::new()
+        .nest_service("/static", ServeDir::new(&cfg.static_url))
         .route("/", get(async || "hello, msg data!".to_string()))
         .route("/new_stream", get(new_stream::NewStream::handle_get))
         .layer(Extension(Arc::clone(cfg)));

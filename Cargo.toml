@@ -26,8 +26,9 @@ reqwest = { version = "*", features = ["json"]}
 http = "*"
 md5 = "*"
 sysinfo = "0.35.2"
-redis = { version = "0.25", features = ["tokio-comp"]}
+redis = { version = "0.32.4", features = ["tokio-comp"]}
 uuid = { version = "1.7.0", features = ["v4", "fast-rng", "macro-diagnostics"]}
+tower-http = { version = "0.6.1", features = ["fs", "trace"] }
 
 [build-dependencies]
 onnxruntime-sys = "^0.0.14"

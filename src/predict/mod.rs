@@ -89,7 +89,7 @@ pub struct BoundingBox {
 }
 
 #[allow(unused)]
-fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]) -> Result<String> {
+fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]) -> Result<PathBuf> {
     init()?;
 
     let img = match image::open(im_path) {
@@ -173,7 +173,8 @@ fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]
 }
 
 #[allow(unused)]
-fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32)>, tag: &str) -> Result<String> {
+fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32)>, tag: &str) -> Result<PathBuf> {
+
     // Load the original image
     let mut img = image::open(image_path)?.to_rgb8();
 
@@ -216,7 +217,7 @@ fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32
     img.save(&output_path)?;
 
     // println!("Visualized detections saved to {:?}", output_path);
-    Ok(output_path.display().to_string())
+    Ok(output_path)
 }
 
 #[derive(Debug, Serialize)]
@@ -255,13 +256,18 @@ pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
                 .with_execution_providers([CUDAExecutionProvider::default().build()])?
                 .commit_from_file(&p.model)?;
             let output = _predict(&mut m, &PathBuf::from(f), &p.tag, &p.label)?;
+            let output_url = format!(
+                "{}/static/{}",
+                cfg.svr_root_url,
+                output.file_name().unwrap().to_string_lossy()
+            );
             let _ = _notify(&cfg.notify_svr_url, json!(NotifyData {
                 alarm_uuid: get_uuid(),
                 title: p.title.clone(),
                 content: p.content.clone(),
                 alarm_type: p.tag.clone(),
                 date_time: get_current_str(None),
-                media_url: vec![output],  // todo
+                media_url: vec![output_url],  // todo
                 video_url: vec![],
                 organization_uuid: stream_info.organization_uuid.clone().unwrap_or("".into()),
                 project_uuid: stream_info.project_uuid.clone().unwrap_or("".into()),
@@ -291,7 +297,7 @@ mod tests {
     use super::*;
     use ort::execution_providers::cuda::CUDAExecutionProvider;
 
-    fn swim_predict(m: &mut Session, im: &PathBuf) -> Result<String> {
+    fn swim_predict(m: &mut Session, im: &PathBuf) -> Result<PathBuf> {
         Ok(_predict(m, im, "swim", &["person".into()])?)
     }
 
