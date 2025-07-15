@@ -25,7 +25,10 @@ use imageproc::drawing::{
 	draw_text_mut,
 	draw_hollow_rect_mut,
 };
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    fs::create_dir_all,
+};
 use ort::execution_providers::*;
 
 #[allow(unused)]
@@ -89,7 +92,7 @@ pub struct BoundingBox {
 }
 
 #[allow(unused)]
-fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]) -> Result<PathBuf> {
+fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String], out_pf: &PathBuf) -> Result<()> {
     init()?;
 
     let img = match image::open(im_path) {
@@ -166,14 +169,15 @@ fn _predict(model: &mut Session, im_path: &PathBuf, tag: &str, labels: &[String]
 
     println!("Detected {} objects:", boxes.len());
     if !boxes.is_empty() {
-        return visualize_detections(im_path, boxes, tag);
+        visualize_detections(im_path, boxes, tag, out_pf);
+        return Ok(())
     }
 
     Err(anyhow!("no detect"))
 }
 
 #[allow(unused)]
-fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32)>, tag: &str) -> Result<PathBuf> {
+fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32)>, tag: &str, out_pf: &PathBuf) -> Result<()> {
 
     // Load the original image
     let mut img = image::open(image_path)?.to_rgb8();
@@ -203,21 +207,9 @@ fn visualize_detections(image_path: &PathBuf, boxes: Vec<(BoundingBox, &str, f32
             &text
         );
     }
+    img.save(out_pf)?;
 
-    // Save the image with visualized detections
-    let output_path = image_path.with_file_name(
-        format!("{}_{}_out.jpg", 
-            image_path 
-                .file_stem()
-                .ok_or(anyhow::anyhow!("Failed to get file stem"))?
-                .to_string_lossy(),
-            tag
-        )
-    );
-    img.save(&output_path)?;
-
-    // println!("Visualized detections saved to {:?}", output_path);
-    Ok(output_path)
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -255,11 +247,20 @@ pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
             let mut m = Session::builder()?
                 .with_execution_providers([CUDAExecutionProvider::default().build()])?
                 .commit_from_file(&p.model)?;
-            let output = _predict(&mut m, &PathBuf::from(f), &p.tag, &p.label)?;
+
+            let pf = PathBuf::from(&f);
+            let mut out_pf = PathBuf::from(&cfg.static_dir);
+            out_pf = out_pf.join(&p.tag);
+            out_pf = out_pf.with_file_name(pf.file_name().ok_or(anyhow!("can not get file name"))?);
+            if let Some(p) = out_pf.parent() {
+                create_dir_all(p)?;
+            }
+
+            _predict(&mut m, &pf, &p.tag, &p.label, &out_pf)?;
             let output_url = format!(
                 "{}/static/{}",
                 cfg.svr_root_url,
-                output.file_name().unwrap().to_string_lossy()
+                out_pf.file_name().unwrap().to_string_lossy()
             );
             let _ = _notify(&cfg.notify_svr_url, json!(NotifyData {
                 alarm_uuid: get_uuid(),
@@ -290,15 +291,16 @@ async fn _notify(sms_server_url: &str, payload: Value, timeout: u64) -> Result<(
     Ok(())
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use ort::execution_providers::cuda::CUDAExecutionProvider;
 
-    fn swim_predict(m: &mut Session, im: &PathBuf) -> Result<PathBuf> {
-        Ok(_predict(m, im, "swim", &["person".into()])?)
+    fn swim_predict(m: &mut Session, im: &PathBuf) -> Result<()> {
+        let stem = im.file_stem().unwrap().to_string_lossy();
+        let ext = im.extension().unwrap().to_string_lossy();
+        let out = format!("{stem}_out.{ext}");
+        _predict(m, im, "swim", &["person".into()], &im.with_file_name(out))
     }
 
     #[test]
@@ -317,7 +319,7 @@ mod tests {
             let im = im?;
             if im.file_type()?.is_file() {
                 let start = get_current_str(None);
-                swim_predict(&mut model, &im.path())?;
+                let _ = swim_predict(&mut model, &im.path());
                 let end = get_current_str(None);
                 println!("Start: {}, End: {}", start, end);
             }

@@ -6,8 +6,8 @@ edition = "2024"
 [dependencies]
 ffmpeg-next = "7.1.0"
 image = "0.25"
-time = { version = "0.3", features = ["formatting"] }
-clap = { version = "*", features = ["derive"]}
+time = { version = "0.3", features = [ "formatting" ] }
+clap = { version = "*", features = [ "derive" ] }
 anyhow = "*"
 ort = "2.0.0-rc.10"
 ndarray = "0.16"

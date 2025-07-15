@@ -52,7 +52,7 @@ pub struct Config {
     pub notify_svr_url: String,
     pub notify_timeout: u64,
     pub redis_stream_tag: String,
-    pub static_url: String,
+    pub static_dir: String,
     pub svr_root_url: String,
     pub predict: Vec<Predict>,
 }
@@ -105,7 +105,7 @@ pub fn read_from_toml(f: &str) -> Result<Config> {
 
 async fn web_svr(cfg: &Arc<Config>) -> Result<()> {
     let app = Router::new()
-        .nest_service("/static", ServeDir::new(&cfg.static_url))
+        .nest_service("/static", ServeDir::new(&cfg.static_dir))
         .route("/", get(async || "hello, msg data!".to_string()))
         .route("/new_stream", get(new_stream::NewStream::handle_get))
         .layer(Extension(Arc::clone(cfg)));
