@@ -11,14 +11,13 @@ pub struct NewStreamReq {
     pub organization_uuid: Option<String>,
 }
 
-
 impl ExecSql<NewStreamReq> for NewStream {
     async fn handle_get_with_redis(
         cfg: Extension<Arc<Config>>,
         rds: Extension<Arc<Client>>,
-        prms: Option<Query<NewStreamReq>>
+        prms: Option<Query<NewStreamReq>>,
     ) -> Result<Json<Value>, WebErr> {
-        let prms= match prms {
+        let prms = match prms {
             Some(Query(p)) => p,
             None => {
                 return Err("no stream url".into());
@@ -38,8 +37,9 @@ impl ExecSql<NewStreamReq> for NewStream {
         let mut con = rds.get_multiplexed_async_connection().await?;
         con.set::<_, String, String>(
             format!("{}_{}", &cfg.redis_stream_tag, md5_val),
-            serde_json::to_string(&prms)?
-        ).await?;
+            serde_json::to_string(&prms)?,
+        )
+        .await?;
 
         Ok(Json(json!({
             "success": success,
@@ -55,9 +55,12 @@ fn is_stream_valid(md5_val: &str) -> Result<bool> {
     for p in sys.processes().values() {
         if let Some(s) = p.name().to_str()
             && s.contains("rtmp-frame")
-            && p.cmd().iter().any(|s| s.to_string_lossy().contains(md5_val)) {
-                return Ok(true)
-            }
+            && p.cmd()
+                .iter()
+                .any(|s| s.to_string_lossy().contains(md5_val))
+        {
+            return Ok(true);
+        }
     }
     Ok(false)
 }

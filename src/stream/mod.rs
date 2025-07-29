@@ -1,13 +1,11 @@
 use super::*;
 
 pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &str) -> Result<()> {
-
     // 初始化FFmpeg
     ffmpeg_next::init().context("FFmpeg初始化失败")?;
 
     // 打开RTMP输入流
-    let mut ictx = format::input(&rtmp_url)
-        .context("无法打开RTMP流")?;
+    let mut ictx = format::input(&rtmp_url).context("无法打开RTMP流")?;
 
     // 查找视频流
     let video_stream_index = ictx
@@ -59,14 +57,19 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &st
                 let width = decoded_frame.width();
                 let height = decoded_frame.height();
                 let format = decoded_frame.format();
-                
+
                 // 示例：打印帧信息
-                if frame_count.is_multiple_of(30) { // 每30帧打印一次
+                if frame_count.is_multiple_of(30) {
+                    // 每30帧打印一次
                     let elapsed = start_time.elapsed().as_secs_f64();
-                    println!("已处理 {} 帧 | 帧率: {:.2} FPS | 尺寸: {}x{} | 格式: {:?}",
-                        frame_count, 
+                    println!(
+                        "已处理 {} 帧 | 帧率: {:.2} FPS | 尺寸: {}x{} | 格式: {:?}",
+                        frame_count,
                         frame_count as f64 / elapsed,
-                        width, height, format);
+                        width,
+                        height,
+                        format
+                    );
                 }
 
                 // 自定义帧处理逻辑...
@@ -79,8 +82,12 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &st
     v_dctx.flush();
 
     let elapsed = start_time.elapsed().as_secs_f64();
-    println!("处理完成: 在 {:.2} 秒内处理了 {} 帧 | 平均帧率: {:.2} FPS",
-        elapsed, frame_count, frame_count as f64 / elapsed);
+    println!(
+        "处理完成: 在 {:.2} 秒内处理了 {} 帧 | 平均帧率: {:.2} FPS",
+        elapsed,
+        frame_count,
+        frame_count as f64 / elapsed
+    );
 
     Ok(())
 }
@@ -98,7 +105,8 @@ async fn process_frame(
     let height = frame.height();
 
     let mut rgb_frame = frame::Video::empty();
-    scaler.run(frame, &mut rgb_frame)
+    scaler
+        .run(frame, &mut rgb_frame)
         .context("帧格式转换失败")?;
 
     let mut image_buffer = ImageBuffer::<Rgb<u8>, Vec<u8>>::new(width, height);
@@ -116,9 +124,13 @@ async fn process_frame(
             image_buffer.put_pixel(x, y, Rgb([r, g, b]));
         }
     }
-    
-    let pf = PathBuf::from(&cfg.dump_path)
-        .join(format!("{}_{}_{}.jpg", md5_val, get_current_str(Some("")), frame_count));
+
+    let pf = PathBuf::from(&cfg.dump_path).join(format!(
+        "{}_{}_{}.jpg",
+        md5_val,
+        get_current_str(Some("")),
+        frame_count
+    ));
     let file_path = pf.display().to_string();
     image_buffer
         .save(&pf)
@@ -131,10 +143,9 @@ async fn process_frame(
 async fn into_redis_pipe(cfg: &Config, f: &Path, rds: &Client) -> Result<()> {
     let mut con = rds.get_multiplexed_async_connection().await?;
     for p in cfg.predict.iter() {
-        let _ = con.lpush::<_, String, String>(
-            &p.pipe,
-            f.display().to_string()
-        ).await;
+        let _ = con
+            .lpush::<_, String, String>(&p.pipe, f.display().to_string())
+            .await;
     }
     Ok(())
 }

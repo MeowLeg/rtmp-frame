@@ -1,46 +1,28 @@
-use anyhow::{
-    Context, Result,
-    anyhow,
+use anyhow::{Context, Result, anyhow};
+use axum::{
+    Extension,
+    routing::{Router, get},
 };
-use tower_http::services::ServeDir;
+use chrono::Local;
+use clap::{Parser, Subcommand};
+use ffmpeg_next::{codec, format, frame, media, software::scaling};
+use image::{ImageBuffer, Rgb};
+use ort::session::Session;
+use redis::{AsyncCommands, Client};
+use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::Read,
-    path::{
-        Path, PathBuf,
-    },
-    time::Instant,
-    sync::Arc,
+    path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
+    time::Instant,
 };
-use ffmpeg_next::{
-    codec, format, frame, media, software::scaling
-};
-use image::{Rgb, ImageBuffer};
-use serde::{
-    Serialize,
-    Deserialize,
-};
-use ort::session::Session;
-use axum::{
-    Extension,
-    routing::{
-        Router,
-        get,
-    }
-};
-use clap::{
-    Parser, Subcommand
-};
-use chrono::Local;
-use redis::{
-    AsyncCommands,
-    Client,
-};
+use tower_http::services::ServeDir;
 
+mod handler;
 mod predict;
 mod stream;
-mod handler;
 use handler::*;
 
 #[derive(Debug, Deserialize)]
@@ -82,7 +64,7 @@ struct Cli {
     md5: Option<String>,
 
     /// config file
-    #[arg(short, long, default_value="./config.toml")]
+    #[arg(short, long, default_value = "./config.toml")]
     config: String,
 }
 
@@ -132,24 +114,23 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Some(Commands::Web) => {
-            for _ in 0 .. cfg.predict_worker_num {
-                let _ = Command::new("./rtmp-frame")
-                    .arg("predict")
-                    .spawn()?;
+            for _ in 0..cfg.predict_worker_num {
+                let _ = Command::new("./rtmp-frame").arg("predict").spawn()?;
             }
             return web_svr(&cfg).await;
-        },
+        }
         Some(Commands::Predict) => {
             return predict::predict(&cfg, &rds).await;
-        },
+        }
         None => {}
     }
 
-    if let Some(url) = cli.url 
+    if let Some(url) = cli.url
         && let Some(md5_val) = cli.md5
-        && md5_val == format!("{:x}", md5::compute(url.as_bytes())) {
-            return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
-        }
+        && md5_val == format!("{:x}", md5::compute(url.as_bytes()))
+    {
+        return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
+    }
 
     Ok(())
 }

@@ -1,9 +1,9 @@
 use anyhow::Result;
-use std::path::PathBuf;
 use md5;
+use std::path::PathBuf;
 
 #[test]
-fn new_file_test() -> Result<()>{
+fn new_file_test() -> Result<()> {
     let ori_file_path = "./data/swim/334.jpg";
     let ext = ori_file_path.split(".").last().unwrap_or("jpg");
     let md5_val = format!("{:x}", md5::compute(ori_file_path.as_bytes()));
