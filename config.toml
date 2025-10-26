@@ -21,3 +21,7 @@ pipe = "xinlan_predict_0001_swim"
 label = ["person",]
 
 # rtmp://play-sh.quklive.com/live/1761274636335259
+
+# predict 是在接收到启动指令之后运行的，相关参数可以在命令行里指定
+# 探测到了之后发送信息给服务接口
+# 需要手动关闭这个进程，对生成的Child使用kill
