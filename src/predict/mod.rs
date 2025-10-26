@@ -223,10 +223,13 @@ pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
     loop {
         for p in cfg.predict.iter() {
             let f: String = con.rpop(&p.pipe, None).await?;
+            println!("f is {}", &f);
             let md5_val = f.split("_").next().ok_or(anyhow!("can not get md5 val"))?;
+            println!("md5 is {}", &md5_val);
             let data: String = con
                 .get(format!("{}_{}", &cfg.redis_stream_tag, md5_val))
                 .await?;
+            println!("data is {}", &data);
             let stream_info: NewStreamReq = serde_json::from_str(&data)?;
             let mut m = Session::builder()?
                 .with_execution_providers([CUDAExecutionProvider::default().build()])?

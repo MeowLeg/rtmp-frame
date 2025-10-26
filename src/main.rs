@@ -10,6 +10,7 @@ use image::{ImageBuffer, Rgb};
 use ort::session::Session;
 use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
+use sqlx::{Connection, FromRow, SqliteConnection, sqlite::Sqlite};
 use std::{
     fs::File,
     io::Read,
@@ -29,6 +30,7 @@ use handler::*;
 pub struct Config {
     pub port: u32,
     pub redis_svr_url: String,
+    pub db_path: String,
     pub dump_path: String,
     pub predict_worker_num: u32,
     pub notify_svr_url: String,
@@ -37,6 +39,8 @@ pub struct Config {
     pub static_dir: String,
     pub svr_root_url: String,
     pub predict: Vec<Predict>,
+    pub is_test: bool,
+    pub frame_interval_count: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,7 +59,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// run edge for incrment of duration or out pv
+    /// 处理的rtmp流地址
     #[arg(short, long)]
     url: Option<String>,
 
@@ -108,8 +112,8 @@ pub fn get_current_str(concat: Option<&str>) -> String {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cfg = Arc::new(read_from_toml("./config.toml")?);
     let cli = Cli::parse();
+    let cfg = Arc::new(read_from_toml(&cli.config)?);
     let rds = Client::open(cfg.redis_svr_url.clone())?;
 
     match cli.command {
@@ -125,11 +129,18 @@ async fn main() -> Result<()> {
         None => {}
     }
 
-    if let Some(url) = cli.url
-        && let Some(md5_val) = cli.md5
-        && md5_val == format!("{:x}", md5::compute(url.as_bytes()))
-    {
-        return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
+    if cfg.is_test {
+        if let Some(url) = cli.url {
+            let md5_val = format!("{:x}", md5::compute(url.as_bytes()));
+            return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
+        }
+    } else {
+        if let Some(url) = cli.url
+            && let Some(md5_val) = cli.md5
+            && md5_val == format!("{:x}", md5::compute(url.as_bytes()))
+        {
+            return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
+        }
     }
 
     Ok(())

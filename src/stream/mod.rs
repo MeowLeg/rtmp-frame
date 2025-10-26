@@ -1,3 +1,5 @@
+use sqlx::{Sqlite, sqlite::SqliteConnectOptions};
+
 use super::*;
 
 pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &str) -> Result<()> {
@@ -59,7 +61,11 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &st
                 let format = decoded_frame.format();
 
                 // 示例：打印帧信息
-                if frame_count.is_multiple_of(30) {
+                if frame_count.is_multiple_of(cfg.frame_interval_count) {
+                    // 自定义帧处理逻辑...
+                    process_frame(&mut scaler, &decoded_frame, frame_count, &cfg, rds, md5_val)
+                        .await?;
+
                     // 每30帧打印一次
                     let elapsed = start_time.elapsed().as_secs_f64();
                     println!(
@@ -71,9 +77,6 @@ pub async fn stream(rtmp_url: &str, cfg: Arc<Config>, rds: &Client, md5_val: &st
                         format
                     );
                 }
-
-                // 自定义帧处理逻辑...
-                process_frame(&mut scaler, &decoded_frame, frame_count, &cfg, rds, md5_val).await?;
             }
         }
     }
@@ -136,8 +139,10 @@ async fn process_frame(
         .save(&pf)
         .context(format!("保存图像失败: {:?}", &file_path))?;
 
-    // predicts(cfg, &pf)
-    into_redis_pipe(cfg, &pf, rds).await
+    // let _ = predicts(cfg, &pf).await?;
+    // into_redis_pipe(cfg, &pf, rds).await?;
+
+    Ok(())
 }
 
 async fn into_redis_pipe(cfg: &Config, f: &Path, rds: &Client) -> Result<()> {
@@ -147,5 +152,25 @@ async fn into_redis_pipe(cfg: &Config, f: &Path, rds: &Client) -> Result<()> {
             .lpush::<_, String, String>(&p.pipe, f.display().to_string())
             .await;
     }
+    Ok(())
+}
+
+async fn predict(
+    cfg: &Config,
+    pf: &PathBuf,
+    stream_url: &str,
+    project_uuid: &str,
+    organization_uuid: &str,
+    md5_val: &str,
+) -> Result<()> {
+    let mut conn = SqliteConnection::connect(&cfg.db_path).await?;
+    let sql = r#"
+        insert into pic(path, stream_url,
+            project_uuid, organization_uuid, pic_md5)
+        values(?,?,?,?,?)
+    "#;
+    // let r = sqlx::query(sql)
+    // .bind()
+
     Ok(())
 }
