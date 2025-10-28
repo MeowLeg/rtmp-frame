@@ -1,0 +1,164 @@
+{
+        "uuid": "0199e1ac-da29-7169-adec-648b9066f7d2",
+        "organization_uuid": "43d03d01-cf1c-4f2f-b2c8-033cda596489",
+        "project_uuid": "5d312f81-81e0-4822-90c9-f994ffe27f64",
+        "flight_uuid": "",
+        "sn": "1581F8HGX254W00A0C5Z",
+        "rtmp": "rtmp://fh2.wifizs.cn/drone_push/1581F8HGX254W00A0C5Z",
+        "labels": [
+            {
+                "id": 1,
+                "code": "swim_reservoir",
+                "name": "水库游泳",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 2,
+                "code": "fire_forest",
+                "name": "森林防火",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 3,
+                "code": "rubbish",
+                "name": "垃圾倾倒",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 4,
+                "code": "roadside_stand",
+                "name": "流动摊贩",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 5,
+                "code": "illegal_sewage",
+                "name": "污水偷排",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 6,
+                "code": "rubbish_river",
+                "name": "河面垃圾",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 7,
+                "code": "straw_burning",
+                "name": "秸秆焚烧",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 8,
+                "code": "dust_buildingsite",
+                "name": "工地扬尘",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 9,
+                "code": "no_helmet",
+                "name": "未带头盔",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 10,
+                "code": "small_ship",
+                "name": "三无船只",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 11,
+                "code": "port_safe",
+                "name": "港口码头安全",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 12,
+                "code": "illegal_cons",
+                "name": "违章建筑",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 13,
+                "code": "farmland_occ",
+                "name": "耕地占用",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 14,
+                "code": "miss_manhole_cover",
+                "name": "井盖缺失",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 15,
+                "code": "road_collapse",
+                "name": "路面塌陷",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 16,
+                "code": "rubbish_seaside",
+                "name": "海岸线垃圾",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            },
+            {
+                "id": 17,
+                "code": "pinewiltdisease",
+                "name": "松材线虫病",
+                "tenantId": 2,
+                "createdAt": null,
+                "updatedAt": null,
+                "deletedAt": null
+            }
+        ],
+        "tenantId": 2
+    }

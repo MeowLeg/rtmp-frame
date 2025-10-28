@@ -1,0 +1,10 @@
+{
+    "uuid": "AI识别任务的UUID, 从yoloStart中推送过来",
+    "title": "标题",
+    "content": "报警内容",
+    "dateTime": "2025-06-17 09:34:35",
+    "alarm_type": [1,2,3, "从yoloStart传过来的label_id, 识别到了哪个传哪个, 如果识别到多个则传数组"],
+    "mediaUrl": ["图片的url", "图片的url", "图片的url"],
+    "videoUrl": ["视频的url", "视频的url", "视频的url"],
+    "otherUrl": ["其他文件的url", "其他文件的url", "其他文件的url"]
+}
