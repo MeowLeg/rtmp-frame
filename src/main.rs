@@ -15,7 +15,7 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
-    process::Command,
+    // process::Command,
     sync::Arc,
     time::Instant,
 };
@@ -50,10 +50,11 @@ pub struct Predict {
     pub content: String,
     pub model: String,
     pub pipe: String,
+    pub imgsz: usize,
     pub label: Vec<String>,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(version, about, long_about=None)]
 struct Cli {
     #[command(subcommand)]
@@ -70,9 +71,15 @@ struct Cli {
     /// config file
     #[arg(short, long, default_value = "./config.toml")]
     config: String,
+
+    #[arg(short, long, default_value = "")]
+    project_uuid: String,
+
+    #[arg(short, long, default_value = "")]
+    organization_uuid: String,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum Commands {
     /// run as daemon for monitor
     Web,
@@ -114,32 +121,53 @@ pub fn get_current_str(concat: Option<&str>) -> String {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let cfg = Arc::new(read_from_toml(&cli.config)?);
-    let rds = Client::open(cfg.redis_svr_url.clone())?;
+    // println!("cli is {:?}", cli);
+    // let rds = Client::open(cfg.redis_svr_url.clone())?;
 
     match cli.command {
         Some(Commands::Web) => {
-            for _ in 0..cfg.predict_worker_num {
-                let _ = Command::new("./rtmp-frame").arg("predict").spawn()?;
-            }
+            // for _ in 0..cfg.predict_worker_num {
+            //     let _ = Command::new("./rtmp-frame").arg("predict").spawn()?;
+            // }
+            // web仅仅用于接收启动与停止命令
+            // 预测可以另写一个单独的处理进程
             return web_svr(&cfg).await;
         }
         Some(Commands::Predict) => {
-            return predict::predict(&cfg, &rds).await;
+            // 预测应该对数据库执行，减少对redis的依赖
+            // 去掉redis
+            return predict::predict(&cfg).await;
         }
         None => {}
     }
 
     if cfg.is_test {
         if let Some(url) = cli.url {
-            let md5_val = format!("{:x}", md5::compute(url.as_bytes()));
-            return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
+            let stream_md5_val = format!("{:x}", md5::compute(url.as_bytes()));
+            return stream::stream(
+                Arc::clone(&cfg),
+                &url,
+                // &rds,
+                &stream_md5_val,
+                &cli.project_uuid,
+                &cli.organization_uuid,
+            )
+            .await;
         }
     } else {
         if let Some(url) = cli.url
-            && let Some(md5_val) = cli.md5
-            && md5_val == format!("{:x}", md5::compute(url.as_bytes()))
+            && let Some(stream_md5_val) = cli.md5
+            && stream_md5_val == format!("{:x}", md5::compute(url.as_bytes()))
         {
-            return stream::stream(&url, Arc::clone(&cfg), &rds, &md5_val).await;
+            return stream::stream(
+                Arc::clone(&cfg),
+                &url,
+                // &rds,
+                &stream_md5_val,
+                &cli.project_uuid,
+                &cli.organization_uuid,
+            )
+            .await;
         }
     }
 

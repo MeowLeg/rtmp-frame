@@ -16,11 +16,17 @@ is_test = true
 tag = "swim"  # 通知数据结构等的需要
 title = "游泳警告"  # 通知数据结构需要
 content = ""  # 通知数据结构需要
-model = "./model/swim_yolo8_nano.onnx"
+# model = "./model/swim_yolo8_nano.onnx"
+model = "./model/swim_drone_yolo8_nano_720.onnx"
 pipe = "xinlan_predict_0001_swim"
-label = ["person",]
+imgsz = 736
+# label = ["person",]
+label = ['boat', 'buoy', 'jetski', 'life_saving_appliances', 'swimmer']
 
 # rtmp://play-sh.quklive.com/live/1761274636335259
+# project_uuid: 358f2d9b-a54e-41c9-a7c2-dd1228d97847
+# organization_uuid: 43d03d01-cf1c-4f2f-b2c8-033cda596489
+# cargo run -- -u rtmp://play-sh.quklive.com/live/1761274636335259 -p 358f2d9b-a54e-41c9-a7c2-dd1228d97847 -o 43d03d01-cf1c-4f2f-b2c8-033cda596489
 
 # predict 是在接收到启动指令之后运行的，相关参数可以在命令行里指定
 # 探测到了之后发送信息给服务接口

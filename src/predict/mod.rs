@@ -1,5 +1,3 @@
-use crate::handler::new_stream::NewStreamReq;
-
 use super::*;
 use ab_glyph::{FontRef, PxScale};
 use image::GenericImageView;
@@ -74,6 +72,7 @@ pub struct BoundingBox {
 fn _predict(
     model: &mut Session,
     im_path: &PathBuf,
+    imgsz: usize,
     tag: &str,
     labels: &[String],
     out_pf: &PathBuf,
@@ -90,9 +89,9 @@ fn _predict(
     let (w, h) = (img.width() as usize, img.height() as usize);
     // println!("w is {}, h is {}", w, h);
 
-    let re_img = img.resize_exact(640, 640, image::imageops::FilterType::CatmullRom);
+    let re_img = img.resize_exact(imgsz as u32, imgsz as u32, image::imageops::FilterType::CatmullRom);
 
-    let mut input = Array::zeros((1, 3, 640, 640));
+    let mut input = Array::zeros((1, 3, imgsz, imgsz));
     for pixel in re_img.pixels() {
         let x = pixel.0 as _;
         let y = pixel.1 as _;
@@ -102,6 +101,7 @@ fn _predict(
         input[[0, 2, y, x]] = (b as f32) / 255.;
     }
 
+    println!("run to input_values");
     let input_values = match TensorRef::from_array_view(&input) {
         Ok(values) => values,
         Err(e) => {
@@ -109,13 +109,15 @@ fn _predict(
             return Err(e.into());
         }
     };
+    println!("run to output");
     let outputs = model.run(inputs!["images" => input_values])?;
+
+    println!("outputs: {:?}", outputs); // when cfg.test
 
     let output = outputs["output0"]
         .try_extract_array::<f32>()?
         .t()
         .into_owned();
-    // println!("{:?}", output);
 
     let mut boxes = Vec::new();
     let output = output.slice(s![.., .., 0]);
@@ -132,11 +134,12 @@ fn _predict(
         if prob < 0.5 {
             continue;
         }
+        let imgsz_ft = imgsz as f32;
         let label = labels[class_id].as_ref();
-        let xc = row[0] / 640. * (w as f32);
-        let yc = row[1] / 640. * (h as f32);
-        let w = row[2] / 640. * (w as f32);
-        let h = row[3] / 640. * (h as f32);
+        let xc = row[0] / imgsz_ft * (w as f32);
+        let yc = row[1] / imgsz_ft * (h as f32);
+        let w = row[2] / imgsz_ft * (w as f32);
+        let h = row[3] / imgsz_ft * (h as f32);
         let b = BoundingBox {
             x1: xc - w / 2.,
             y1: yc - h / 2.,
@@ -196,6 +199,18 @@ fn visualize_detections(
     Ok(())
 }
 
+#[derive(Debug, Serialize, FromRow)]
+pub struct Pic {
+    id: i32,
+    path: String,
+    stream_url: String,
+    project_uuid: String,
+    organization_uuid: String,
+    pic_md5: String,
+    create_date: String,
+    predicted: i32,
+}
+
 #[derive(Debug, Serialize)]
 struct NotifyData {
     alarm_uuid: String,
@@ -218,24 +233,37 @@ fn get_uuid() -> String {
     format!("{u}").split("-").collect::<String>()
 }
 
-pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
-    let mut con = rds.get_multiplexed_async_connection().await?;
-    loop {
-        for p in cfg.predict.iter() {
-            let f: String = con.rpop(&p.pipe, None).await?;
-            println!("f is {}", &f);
-            let md5_val = f.split("_").next().ok_or(anyhow!("can not get md5 val"))?;
-            println!("md5 is {}", &md5_val);
-            let data: String = con
-                .get(format!("{}_{}", &cfg.redis_stream_tag, md5_val))
-                .await?;
-            println!("data is {}", &data);
-            let stream_info: NewStreamReq = serde_json::from_str(&data)?;
+// pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
+pub async fn predict(cfg: &Config) -> Result<()> {
+    // let mut con = rds.get_multiplexed_async_connection().await?;
+    let mut conn = SqliteConnection::connect(&cfg.db_path).await?;
+    let sql = r#"
+            select id, path, stream_url,
+                project_uuid, organization_uuid, pic_md5,
+                create_date, predicted
+            from pic
+            where predicted = 0
+        "#;
+    let pics = sqlx::query_as::<Sqlite, Pic>(sql)
+        .fetch_all(&mut conn)
+        .await?;
+
+    for p in cfg.predict.iter() {
+        // let f: String = con.rpop(&p.pipe, None).await?;
+        for pic in pics.iter() {
+            println!("pic is {:?}", &pic);
+            // let md5_val = f.split("_").next().ok_or(anyhow!("can not get md5 val"))?;
+            // println!("md5 is {}", &md5_val);
+            // let data: String = con
+            //     .get(format!("{}_{}", &cfg.redis_stream_tag, md5_val))
+            //     .await?;
+            // println!("data is {}", &data);
+            // let stream_info: NewStreamReq = serde_json::from_str(&data)?;
             let mut m = Session::builder()?
                 .with_execution_providers([CUDAExecutionProvider::default().build()])?
                 .commit_from_file(&p.model)?;
 
-            let pf = PathBuf::from(&f);
+            let pf = PathBuf::from(&pic.path);
             let mut out_pf = PathBuf::from(&cfg.static_dir);
             out_pf = out_pf.join(&p.tag);
             out_pf = out_pf.with_file_name(pf.file_name().ok_or(anyhow!("can not get file name"))?);
@@ -243,40 +271,58 @@ pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
                 create_dir_all(p)?;
             }
 
-            _predict(&mut m, &pf, &p.tag, &p.label, &out_pf)?;
-            let output_url = format!(
-                "{}/static/{}",
-                cfg.svr_root_url,
-                out_pf.file_name().unwrap().to_string_lossy()
-            );
-            let _ = _notify(
-                &cfg.notify_svr_url,
-                json!(NotifyData {
-                    alarm_uuid: get_uuid(),
-                    title: p.title.clone(),
-                    content: p.content.clone(),
-                    alarm_type: p.tag.clone(),
-                    date_time: get_current_str(None),
-                    media_url: vec![output_url], // todo
-                    video_url: vec![],
-                    organization_uuid: stream_info.organization_uuid.clone().unwrap_or("".into()),
-                    project_uuid: stream_info.project_uuid.clone().unwrap_or("".into()),
-                    rtmp: stream_info.stream_url.clone()
-                }),
-                cfg.notify_timeout,
-            )
-            .await;
+            println!("run to _predict");
 
-            todo!("需要将本地文件名转为http访问");
+            match _predict(&mut m, &pf, p.imgsz, &p.tag, &p.label, &out_pf) {
+                Ok(()) => {
+                    let output_url = format!(
+                        "{}/static/{}",
+                        cfg.svr_root_url,
+                        out_pf.file_name().unwrap().to_string_lossy()
+                    );
+                    let _ = _notify(
+                        &cfg.notify_svr_url,
+                        json!(NotifyData {
+                            alarm_uuid: get_uuid(),
+                            title: p.title.clone(),
+                            content: p.content.clone(),
+                            alarm_type: p.tag.clone(),
+                            date_time: get_current_str(None),
+                            media_url: vec![output_url], // todo
+                            video_url: vec![],
+                            organization_uuid: pic.organization_uuid.clone(),
+                            project_uuid: pic.project_uuid.clone(),
+                            rtmp: pic.stream_url.clone()
+                        }),
+                        cfg.notify_timeout,
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    println!("err is {:?}", e);
+                }
+            }
+            // todo!("需要将本地文件名转为http访问");
         }
     }
+
+    // 更新数据库pic表，表示已经被AI判断过了
+    let update_sql = "update pic set predicted = 1 where id = ?";
+    for pic in pics.iter() {
+        let _ = sqlx::query(update_sql)
+            .bind(pic.id)
+            .execute(&mut conn)
+            .await?;
+    }
+
+    Ok(())
 }
 
 async fn _notify(sms_server_url: &str, payload: Value, timeout: u64) -> Result<()> {
-    let cli = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout))
-        .build()?;
-    let _resp = cli.post(sms_server_url).json(&payload).send().await?;
+    // let cli = reqwest::Client::builder()
+    //     .timeout(std::time::Duration::from_secs(timeout))
+    //     .build()?;
+    // let _resp = cli.post(sms_server_url).json(&payload).send().await?;
     Ok(())
 }
 
