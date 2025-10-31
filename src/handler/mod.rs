@@ -1,5 +1,6 @@
 use super::*;
-pub mod new_stream;
+pub mod start_dump;
+pub mod stop_dump;
 
 use axum::{
     Json,
@@ -20,13 +21,13 @@ pub trait ExecSql<T> {
         Ok(Json(json!({})))
     }
 
-    async fn handle_post_with_redis_cli(
-        _cfg: Extension<Arc<Config>>,
-        _redis: Extension<Arc<Client>>,
-        _prms: Result<Json<T>, JsonRejection>,
-    ) -> Result<Json<Value>, WebErr> {
-        Ok(Json(json!({})))
-    }
+    // async fn handle_post_with_redis_cli(
+    //     _cfg: Extension<Arc<Config>>,
+    //     _redis: Extension<Arc<Client>>,
+    //     _prms: Result<Json<T>, JsonRejection>,
+    // ) -> Result<Json<Value>, WebErr> {
+    //     Ok(Json(json!({})))
+    // }
 
     async fn handle_get(
         _cfg: Extension<Arc<Config>>,
@@ -35,13 +36,13 @@ pub trait ExecSql<T> {
         Ok(Json(json!({})))
     }
 
-    async fn handle_get_with_redis(
-        _cfg: Extension<Arc<Config>>,
-        _redis: Extension<Arc<Client>>,
-        _prms: Option<Query<T>>,
-    ) -> Result<Json<Value>, WebErr> {
-        Ok(Json(json!({})))
-    }
+    // async fn handle_get_with_redis(
+    //     _cfg: Extension<Arc<Config>>,
+    //     _redis: Extension<Arc<Client>>,
+    //     _prms: Option<Query<T>>,
+    // ) -> Result<Json<Value>, WebErr> {
+    //     Ok(Json(json!({})))
+    // }
 
     async fn handle_get_with_headers(
         _headers: HeaderMap,

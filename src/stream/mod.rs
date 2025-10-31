@@ -5,6 +5,7 @@ pub async fn stream(
     stream_url: &str,
     // rds: &Client,
     stream_md5_val: &str,
+    uuid: &str,
     project_uuid: &str,
     organization_uuid: &str,
 ) -> Result<()> {
@@ -50,7 +51,14 @@ pub async fn stream(
     .context("无法创建缩放上下文")?;
 
     // 记录数据在数据库，用于历史查询
-    let _pid = log_stream(&cfg.db_path, &stream_url, &project_uuid, &organization_uuid).await?;
+    // let _pid = log_stream(
+    //     &cfg.db_path,
+    //     &stream_url,
+    //     uuid,
+    //     &project_uuid,
+    //     &organization_uuid,
+    // )
+    // .await?;
 
     // 处理输入包
     for (stream, packet) in ictx.packets() {
@@ -77,6 +85,7 @@ pub async fn stream(
                         frame_count,
                         &cfg,
                         &stream_url,
+                        uuid,
                         &stream_md5_val,
                         &project_uuid,
                         &organization_uuid,
@@ -123,6 +132,7 @@ async fn process_frame(
     cfg: &Config,
     // rds: &Client,
     stream_url: &str,
+    uuid: &str,
     stream_md5_val: &str,
     project_uuid: &str,
     organization_uuid: &str,
@@ -168,6 +178,7 @@ async fn process_frame(
         pf.to_str()
             .ok_or_else(|| anyhow!("pathbuf can not conver to string"))?,
         stream_url,
+        uuid,
         project_uuid,
         organization_uuid,
         stream_md5_val,
@@ -178,34 +189,38 @@ async fn process_frame(
     Ok(())
 }
 
-#[allow(unused)]
-async fn into_redis_pipe(cfg: &Config, f: &Path, rds: &Client) -> Result<()> {
-    let mut con = rds.get_multiplexed_async_connection().await?;
-    for p in cfg.predict.iter() {
-        let _ = con
-            .lpush::<_, String, String>(&p.pipe, f.display().to_string())
-            .await;
-    }
-    Ok(())
-}
+// #[allow(unused)]
+// async fn into_redis_pipe(cfg: &Config, f: &Path, rds: &Client) -> Result<()> {
+//     let mut con = rds.get_multiplexed_async_connection().await?;
+//     for p in cfg.predict.iter() {
+//         let _ = con
+//             .lpush::<_, String, String>(&p.pipe, f.display().to_string())
+//             .await;
+//     }
+//     Ok(())
+// }
 
 async fn to_predict_db(
     cfg: &Config,
     pf_str: &str, // from PathBuf to String using to_string_lossy
     stream_url: &str,
+    uuid: &str,
     project_uuid: &str,
     organization_uuid: &str,
     stream_md5_val: &str,
 ) -> Result<()> {
     let mut conn = SqliteConnection::connect(&cfg.db_path).await?;
     let sql = r#"
-        insert into pic(path, stream_url,
-            project_uuid, organization_uuid, pic_md5)
-        values(?,?,?,?,?)
+        insert into pic(
+            path, stream_url, uuid,
+            project_uuid, organization_uuid,
+            stream_md5
+        ) values(?,?,?,?,?,?)
     "#;
     let _ = sqlx::query(sql)
         .bind(pf_str)
         .bind(stream_url)
+        .bind(uuid)
         .bind(project_uuid)
         .bind(organization_uuid)
         .bind(stream_md5_val)
@@ -213,25 +228,4 @@ async fn to_predict_db(
         .await?;
 
     Ok(())
-}
-
-async fn log_stream(
-    db_path: &str,
-    stream_url: &str,
-    project_uuid: &str,
-    organization_uuid: &str,
-) -> Result<i64> {
-    let mut conn = SqliteConnection::connect(db_path).await?;
-    let sql = r#"
-        insert into stream(stream_url, project_uuid, organization_uuid)
-        values(?,?,?)
-        "#;
-    let r = sqlx::query(sql)
-        .bind(stream_url)
-        .bind(project_uuid)
-        .bind(organization_uuid)
-        .execute(&mut conn)
-        .await?;
-
-    Ok(r.last_insert_rowid())
 }

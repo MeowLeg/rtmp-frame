@@ -7,6 +7,7 @@ use ort::execution_providers::*;
 use ort::{inputs, value::TensorRef};
 use serde_json::{Value, json};
 use std::{fs::create_dir_all, path::PathBuf};
+pub mod div_predict;
 
 #[allow(unused)]
 pub fn init() -> ort::Result<()> {
@@ -73,11 +74,12 @@ fn _predict(
     model: &mut Session,
     im_path: &PathBuf,
     imgsz: usize,
-    tag: &str,
+    tag: &str, // 模型的标签，目前没有什么用处
     labels: &[String],
     out_pf: &PathBuf,
 ) -> Result<()> {
-    init()?;
+    // println!("start model-------------------0");
+    // init()?;
 
     let img = match image::open(im_path) {
         Ok(img) => img,
@@ -86,13 +88,26 @@ fn _predict(
             return Err(e.into());
         }
     };
+    // println!("start model-------------------1");
     let (w, h) = (img.width() as usize, img.height() as usize);
     // println!("w is {}, h is {}", w, h);
 
-    let re_img = img.resize_exact(imgsz as u32, imgsz as u32, image::imageops::FilterType::CatmullRom);
+    // let re_img = img.resize_exact(imgsz as u32, imgsz as u32, image::imageops::FilterType::CatmullRom);
+    let re_img = img.resize(
+        imgsz as u32,
+        imgsz as u32,
+        image::imageops::FilterType::Nearest,
+    );
+    // println!("start model-------------------1.5");
 
     let mut input = Array::zeros((1, 3, imgsz, imgsz));
+    // println!("input before is {:?}", &input);
+    // let mut i = 0;
     for pixel in re_img.pixels() {
+        // if i < 100 {
+        //     println!("pixel is {:?}", &pixel);
+        //     i += 1;
+        // }
         let x = pixel.0 as _;
         let y = pixel.1 as _;
         let [r, g, b, _] = pixel.2.0;
@@ -100,8 +115,10 @@ fn _predict(
         input[[0, 1, y, x]] = (g as f32) / 255.;
         input[[0, 2, y, x]] = (b as f32) / 255.;
     }
+    // println!("0, 1, 300, 300 is {:?}", &input[[0, 1, 300, 300]]);
+    // println!("input after is {:?}", &input);
+    // println!("start model-------------------2");
 
-    println!("run to input_values");
     let input_values = match TensorRef::from_array_view(&input) {
         Ok(values) => values,
         Err(e) => {
@@ -109,15 +126,23 @@ fn _predict(
             return Err(e.into());
         }
     };
-    println!("run to output");
-    let outputs = model.run(inputs!["images" => input_values])?;
+    // println!("tensor array is {:?}", &input_values);
+    // println!("start model-------------------3");
+    // let outputs = model.run(inputs!["images" => input_values])?;
+    let outputs = model.run(inputs![input_values])?;
+    // println!("start model-------------------4");
+    // println!("outputs is {:?}", &outputs);
 
-    println!("outputs: {:?}", outputs); // when cfg.test
+    // println!("outputs: {:?}", outputs); // when test
 
     let output = outputs["output0"]
         .try_extract_array::<f32>()?
         .t()
         .into_owned();
+    // println!("start model-------------------5");
+    // println!("output is {:?}", &output);
+
+    // println!("output: {:?}", &output); // when test
 
     let mut boxes = Vec::new();
     let output = output.slice(s![.., .., 0]);
@@ -134,8 +159,13 @@ fn _predict(
         if prob < 0.5 {
             continue;
         }
+
+        println!("output is {:?}", &output); // test
+        println!("row is {:?}", &row); // test
+
         let imgsz_ft = imgsz as f32;
         let label = labels[class_id].as_ref();
+        // println!("label is {}", &label); // test
         let xc = row[0] / imgsz_ft * (w as f32);
         let yc = row[1] / imgsz_ft * (h as f32);
         let w = row[2] / imgsz_ft * (w as f32);
@@ -153,18 +183,16 @@ fn _predict(
 
     println!("Detected {} objects:", boxes.len());
     if !boxes.is_empty() {
-        visualize_detections(im_path, boxes, tag, out_pf);
+        visualize_detections(im_path, boxes, out_pf);
         return Ok(());
     }
 
     Err(anyhow!("no detect"))
 }
 
-#[allow(unused)]
 fn visualize_detections(
     image_path: &PathBuf,
     boxes: Vec<(BoundingBox, &str, f32)>,
-    tag: &str,
     out_pf: &PathBuf,
 ) -> Result<()> {
     // Load the original image
@@ -236,6 +264,7 @@ fn get_uuid() -> String {
 // pub async fn predict(cfg: &Config, rds: &Client) -> Result<()> {
 pub async fn predict(cfg: &Config) -> Result<()> {
     // let mut con = rds.get_multiplexed_async_connection().await?;
+    init()?;
     let mut conn = SqliteConnection::connect(&cfg.db_path).await?;
     let sql = r#"
             select id, path, stream_url,
@@ -251,7 +280,7 @@ pub async fn predict(cfg: &Config) -> Result<()> {
     for p in cfg.predict.iter() {
         // let f: String = con.rpop(&p.pipe, None).await?;
         for pic in pics.iter() {
-            println!("pic is {:?}", &pic);
+            // println!("pic is {:?}", &pic); test
             // let md5_val = f.split("_").next().ok_or(anyhow!("can not get md5 val"))?;
             // println!("md5 is {}", &md5_val);
             // let data: String = con
@@ -270,8 +299,6 @@ pub async fn predict(cfg: &Config) -> Result<()> {
             if let Some(p) = out_pf.parent() {
                 create_dir_all(p)?;
             }
-
-            println!("run to _predict");
 
             match _predict(&mut m, &pf, p.imgsz, &p.tag, &p.label, &out_pf) {
                 Ok(()) => {
@@ -318,11 +345,12 @@ pub async fn predict(cfg: &Config) -> Result<()> {
     Ok(())
 }
 
+#[allow(unused)]
 async fn _notify(sms_server_url: &str, payload: Value, timeout: u64) -> Result<()> {
-    // let cli = reqwest::Client::builder()
-    //     .timeout(std::time::Duration::from_secs(timeout))
-    //     .build()?;
-    // let _resp = cli.post(sms_server_url).json(&payload).send().await?;
+    let cli = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout))
+        .build()?;
+    let _resp = cli.post(sms_server_url).json(&payload).send().await?;
     Ok(())
 }
 
@@ -335,12 +363,31 @@ mod tests {
         let stem = im.file_stem().unwrap().to_string_lossy();
         let ext = im.extension().unwrap().to_string_lossy();
         let out = format!("{stem}_out.{ext}");
-        _predict(m, im, "swim", &["person".into()], &im.with_file_name(out))
+        _predict(
+            m,
+            im,
+            640,
+            "swim",
+            &[
+                "pedestrian".into(),
+                "people".into(),
+                "bicycle".into(),
+                "car".into(),
+                "van".into(),
+                "truck".into(),
+                "tricycle".into(),
+                "awning-tricycle".into(),
+                "bus".into(),
+                "motor".into(),
+            ],
+            &im.with_file_name(out),
+        )
     }
 
     #[test]
     fn test_predict() -> Result<()> {
-        let model_path = "./model/swim_yolo8_nano.onnx";
+        // let model_path = "./model/swim_yolo8_nano.onnx";
+        let model_path = "./model/yolo11n_visdrone.onnx";
         let mut model = match Session::builder()?
             .with_execution_providers([CUDAExecutionProvider::default().build()])?
             .commit_from_file(model_path)
@@ -351,15 +398,19 @@ mod tests {
                 return Err(e.into());
             }
         };
-        for im in std::fs::read_dir("./data/swim")? {
-            let im = im?;
-            if im.file_type()?.is_file() {
-                let start = get_current_str(None);
-                let _ = swim_predict(&mut model, &im.path());
-                let end = get_current_str(None);
-                println!("Start: {}, End: {}", start, end);
-            }
-        }
+
+        // for im in std::fs::read_dir("./dump")? {
+        //     let im = im?;
+        //     if im.file_type()?.is_file() {
+        //         let start = get_current_str(None);
+        //         let _ = swim_predict(&mut model, &im.path());
+        //         let end = get_current_str(None);
+        //         println!("Start: {}, End: {}", start, end);
+        //     }
+        // }
+
+        let im = PathBuf::from("./dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174126_4440.jpg");
+        let _ = swim_predict(&mut model, &im);
         assert!(true);
         Ok(())
     }

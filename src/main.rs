@@ -8,23 +8,25 @@ use clap::{Parser, Subcommand};
 use ffmpeg_next::{codec, format, frame, media, software::scaling};
 use image::{ImageBuffer, Rgb};
 use ort::session::Session;
-use redis::{AsyncCommands, Client};
+// use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
-use sqlx::{Connection, FromRow, SqliteConnection, sqlite::Sqlite};
+use sqlx::{Connection, FromRow, Sqlite, SqliteConnection};
 use std::{
     fs::File,
     io::Read,
-    path::{Path, PathBuf},
+    path::PathBuf,
     // process::Command,
     sync::Arc,
     time::Instant,
 };
+use sysinfo::System;
 use tower_http::services::ServeDir;
 
 mod handler;
-mod predict;
-mod stream;
 use handler::*;
+mod predict; // 用python预测，ort的效率不是很好
+mod stream;
+mod watcher;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -41,6 +43,9 @@ pub struct Config {
     pub predict: Vec<Predict>,
     pub is_test: bool,
     pub frame_interval_count: u32,
+    pub watch_interval: u64,
+    pub rtmp_max_timeout: u64,
+    pub main_cmd: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +78,9 @@ struct Cli {
     config: String,
 
     #[arg(short, long, default_value = "")]
+    uuid: String,
+
+    #[arg(short, long, default_value = "")]
     project_uuid: String,
 
     #[arg(short, long, default_value = "")]
@@ -100,7 +108,8 @@ async fn web_svr(cfg: &Arc<Config>) -> Result<()> {
     let app = Router::new()
         .nest_service("/static", ServeDir::new(&cfg.static_dir))
         .route("/", get(async || "hello, msg data!".to_string()))
-        .route("/new_stream", get(new_stream::NewStream::handle_get))
+        .route("/start", get(start_dump::StartDump::handle_post))
+        .route("/stop", get(stop_dump::StopDump::handle_post))
         .layer(Extension(Arc::clone(cfg)));
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port)).await?;
     axum::serve(listener, app).await?;
@@ -123,6 +132,8 @@ async fn main() -> Result<()> {
     let cfg = Arc::new(read_from_toml(&cli.config)?);
     // println!("cli is {:?}", cli);
     // let rds = Client::open(cfg.redis_svr_url.clone())?;
+
+    let w = tokio::task::spawn(watcher::watch(Arc::clone(&cfg)));
 
     match cli.command {
         Some(Commands::Web) => {
@@ -149,6 +160,7 @@ async fn main() -> Result<()> {
                 &url,
                 // &rds,
                 &stream_md5_val,
+                &cli.uuid,
                 &cli.project_uuid,
                 &cli.organization_uuid,
             )
@@ -164,12 +176,15 @@ async fn main() -> Result<()> {
                 &url,
                 // &rds,
                 &stream_md5_val,
+                &cli.uuid,
                 &cli.project_uuid,
                 &cli.organization_uuid,
             )
             .await;
         }
     }
+
+    let _ = w.await?;
 
     Ok(())
 }

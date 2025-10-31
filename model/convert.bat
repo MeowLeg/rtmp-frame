@@ -1,1 +1,1 @@
-yolo export model=%1 format=onnx imgsz=720
+yolo export model=%1 format=onnx dynamic=True
