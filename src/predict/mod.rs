@@ -4,8 +4,8 @@ use image::GenericImageView;
 use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
 use ndarray::{Array, Axis, s};
 use ort::execution_providers::*;
-use ort::{inputs, value::TensorRef};
-use serde_json::{Value, json};
+use ort::{inputs, value::TensorRef, value::{Value, Tensor}};
+use serde_json::{Value as SjValue, json};
 use std::{fs::create_dir_all, path::PathBuf};
 pub mod div_predict;
 
@@ -346,7 +346,7 @@ pub async fn predict(cfg: &Config) -> Result<()> {
 }
 
 #[allow(unused)]
-async fn _notify(sms_server_url: &str, payload: Value, timeout: u64) -> Result<()> {
+async fn _notify(sms_server_url: &str, payload: SjValue, timeout: u64) -> Result<()> {
     let cli = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout))
         .build()?;

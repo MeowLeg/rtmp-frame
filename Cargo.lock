@@ -2251,6 +2251,19 @@ dependencies = [
 
 [[package]]
 name = "ndarray"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc1372704f14bb132a49a6701c2238970a359ee0829fed481b522a63bf25456a"
+dependencies = [
+ "matrixmultiply",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "rawpointer",
+]
+
+[[package]]
+name = "ndarray"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
@@ -2460,6 +2473,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
+name = "onnxruntime"
+version = "0.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f420aa8537acfc1d1849ba3c52f5e7dcb7e4a42ef3c3909fea39b2166c0a08d"
+dependencies = [
+ "lazy_static",
+ "ndarray 0.15.1",
+ "onnxruntime-sys",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "onnxruntime-sys"
 version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2522,7 +2548,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fa7e49bd669d32d7bc2a15ec540a527e7764aec722a45467814005725bcd721"
 dependencies = [
  "libloading",
- "ndarray",
+ "ndarray 0.16.1",
  "ort-sys",
  "smallvec 2.0.0-alpha.10",
  "tracing",
@@ -3274,7 +3300,8 @@ dependencies = [
  "image",
  "imageproc",
  "md5",
- "ndarray",
+ "ndarray 0.16.1",
+ "onnxruntime",
  "onnxruntime-sys",
  "ort",
  "ort-candle",
@@ -4287,7 +4314,7 @@ dependencies = [
  "lazy_static",
  "log",
  "maplit",
- "ndarray",
+ "ndarray 0.16.1",
  "num-complex",
  "num-integer",
  "num-traits",
@@ -4312,7 +4339,7 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "maplit",
- "ndarray",
+ "ndarray 0.16.1",
  "nom",
  "num-integer",
  "num-traits",
@@ -4651,7 +4678,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c9f6df3b49d862ea35d2c509801ee64983f2169ea02e3a8642e69ce2230e47c"
 dependencies = [
  "ffmpeg-next",
- "ndarray",
+ "ndarray 0.16.1",
  "tracing",
  "url",
 ]

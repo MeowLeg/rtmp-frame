@@ -1,1 +1,1 @@
-yolo export model=%1 format=onnx dynamic=True
+yolo export model=%1 format=onnx
