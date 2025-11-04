@@ -4,10 +4,14 @@ use image::GenericImageView;
 use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
 use ndarray::{Array, Axis, s};
 use ort::execution_providers::*;
-use ort::{inputs, value::TensorRef, value::{Value, Tensor}};
+use ort::{
+    inputs,
+    value::TensorRef,
+    value::{Tensor, Value},
+};
 use serde_json::{Value as SjValue, json};
 use std::{fs::create_dir_all, path::PathBuf};
-pub mod div_predict;
+// pub mod div_predict;
 
 #[allow(unused)]
 pub fn init() -> ort::Result<()> {

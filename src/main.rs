@@ -95,16 +95,15 @@ enum Commands {
 
     /// 预测子进程应与Web服务在一起，此处保留单独命令，用于方便增减
     Predict,
-
-    /// 使用分割检测某张图片
-    DivPredict {
-        #[arg(long)]
-        model: String,
-        #[arg(long)]
-        pic: String,
-        #[arg(long)]
-        out_dir: String,
-    },
+    // 使用分割检测某张图片
+    // DivPredict {
+    //     #[arg(long)]
+    //     model: String,
+    //     #[arg(long)]
+    //     pic: String,
+    //     #[arg(long)]
+    //     out_dir: String,
+    // },
 }
 
 pub fn read_from_toml(f: &str) -> Result<Config> {
@@ -159,19 +158,19 @@ async fn main() -> Result<()> {
             // 预测应该对数据库执行，减少对redis的依赖
             // 去掉redis
             return predict::predict(&cfg).await;
-        },
-        Some(Commands::DivPredict {
-            model,
-            pic,
-            out_dir,
-        }) => {
-            // 使用分割模型对某张图片进行预测
-            return div_predict::div_predict(
-                &model,
-                &pic,
-                &out_dir,
-            );
-        },
+        }
+        // Some(Commands::DivPredict {
+        //     model,
+        //     pic,
+        //     out_dir,
+        // }) => {
+        //     // 使用分割模型对某张图片进行预测
+        //     return div_predict::div_predict(
+        //         &model,
+        //         &pic,
+        //         &out_dir,
+        //     );
+        // },
         None => {}
     }
 

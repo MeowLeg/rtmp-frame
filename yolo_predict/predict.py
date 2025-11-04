@@ -1,19 +1,30 @@
+from http.client import CREATED
 import os
 import cv2
 import sqlite3
+from cv2.typing import MatLike
+from pandas.core.apply import ResType
 import requests
 from time import sleep
 import numpy as np
 from ultralytics import YOLO
-from typing import Tuple, List, Dict, Any
+from ultralytics.engine.results import Results, Boxes
+from dataclasses import dataclass
 
 
-def split_image(image, n=2):
+# 实现的模型
+MODELS = {
+    "swim_reservoir": "../model/yolo11n_visdrone.pt",  # 可以有多种类型的判断
+    "fire_forest": "../model/fire_tolo8_small.pt",
+}
+
+
+def split_image(image: MatLike, n: int = 2):
     # 分割图片
     h, w = image.shape[:2]
     sub_h, sub_w = h // n, w // n
-    sub_images = []
-    positions = []
+    sub_images: list[MatLike] = []
+    positions: list[tuple[int, int]] = []
     for i in range(n):
         for j in range(n):
             y1 = i * sub_h
@@ -26,14 +37,19 @@ def split_image(image, n=2):
     return sub_images, positions
 
 
-def detect_split_image(model, image, conf=0.5, iou=0.45):
+def detect_split_image(
+    model: YOLO, image: MatLike, conf: float = 0.5, iou: float = 0.45
+):
     # 对分割的图片进行检测
     sub_images, positions = split_image(image, n=2)
     all_boxes = []
 
-    for idx, (sub_img, (x_offset, y_offset)) in enumerate(zip(sub_images, positions)):
-        results = model(sub_img, conf=conf, iou=iou)
-        for box in results[0].boxes:
+    for sub_img, (x_offset, y_offset) in zip(sub_images, positions):
+        results: list[Results] = model(sub_img, conf=conf, iou=iou)
+        boxes = results[0].boxes
+        if boxes is None:
+            continue
+        for box in boxes:
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
             x1 += x_offset
             y1 += y_offset
@@ -69,12 +85,10 @@ def detect_split_image(model, image, conf=0.5, iou=0.45):
     # return nms_results.cpu().numpy()
 
 
-def predict(model, in_path, out_path, im_path, im_name, conf) -> List[str]:
-    # 预测
-    image = cv2.imread(im_path)
-    if image is None:
-        raise FileNotFoundError("图片不存在")
-
+def predict(
+    model: YOLO, in_path: str, out_path: str, im_path: str, im_name: str, conf: float
+) -> list[str]:
+    image: MatLike = cv2.imread(im_path)
     merged_boxes = detect_split_image(model, image, conf=conf, iou=0.45)
 
     labels_result = []
@@ -100,71 +114,76 @@ def predict(model, in_path, out_path, im_path, im_name, conf) -> List[str]:
     return labels_result
 
 
-def read_from_db(db_path: str) -> List[Dict[str, Any]]:
+@dataclass
+class Image:
+    id: str
+    path: str
+    uuid: str
+    create_date: str
+
+
+@dataclass
+class Stream:
+    uuid: str
+    tags: list[str]
+    images: list[Image]
+
+
+def read_from_db(db_path: str) -> list[Stream]:
     # 从数据库读取图片进行检测
     db = sqlite3.connect(db_path)
     db.row_factory = sqlite3.Row
     cur = db.cursor()
-    streams = []
-    for r in [
-        dict(r)
-        for r in cur.execute("""
+    streams: list[Stream] = []
+    rs: list[sqlite3.Row] = cur.execute("""
         select uuid from stream where is_over = 0
     """).fetchall()
-    ]:
-        stream = {"uuid": r["uuid"]}
-        stream["tags"] = [
-            r["code"]
-            for r in cur.execute(
-                "select code from stream_tag where uuid = ?", (r["uuid"],)
-            ).fetchall()
-        ]
-        stream["images"] = [
-            dict(r)
-            for r in cur.execute(
-                "select id, path, uuid, create_date from pic where predicted = 0 and uuid = ?",
-                (r["uuid"],),
-            ).fetchall()
-        ]
+    for r_ in rs:
+        r: dict[str, str] = dict(r_)
+        tags: list[sqlite3.Row] = cur.execute(
+            "select code from stream_tag where uuid = ?", (r["uuid"],)
+        ).fetchall()
+        images_: list[sqlite3.Row] = cur.execute(
+            "select id, path, uuid, create_date from pic where predicted = 0 and uuid = ?",
+            (r["uuid"],),
+        ).fetchall()
+        images: list[dict[str, str]] = [dict(i) for i in images_]
+        stream: Stream = Stream(
+            r["uuid"],
+            [r_["code"] for r_ in tags],
+            [Image(**dict(r_)) for r_ in images],
+        )
         streams.append(stream)
     return streams
 
 
-# 实现的模型
-MODELS = {
-    "swim_reservoir": "../model/yolo11n_visdrone.pt",  # 可以有多种类型的判断
-    "fire_forest": "../model/fire_tolo8_small.pt",
-}
-
-
-def filter_models(tags) -> List[str]:
+def filter_models(tags: list[str]) -> list[YOLO]:
     # 列出实现的模型
     # 类似SET
-    f_models = {}
+    f_models: dict[str, None] = {}
     for tag in tags:
         if MODELS[tag]:
             f_models[MODELS[tag]] = None
-    return f_models.keys()
+    return [YOLO(m) for m in list(f_models.keys())]
 
 
 def loop_predict(
     input_dir: str,
     output_dir: str,
-    conf: 0.5,
-    # models: List[Tuple[Any]],
     db_path: str,
     interval: int,
+    conf: float = 0.5,
 ) -> None:
     # 循环检测
     db = sqlite3.connect(db_path)
     db.row_factory = sqlite3.Row
-    cur = db.ocursor()
+    cur = db.cursor()
     while True:
         im_predicted = []
         for stream in read_from_db(db_path):
             for im in stream.images:
                 im_name = os.path.basename(im.path)
-                for m in filter_models(im.tags):
+                for m in filter_models(stream.tags):
                     labels = predict(
                         m,
                         input_dir,
@@ -174,21 +193,21 @@ def loop_predict(
                         conf,
                     )
                     if len(labels):
-                        im_predicted.appens(
+                        im_predicted.append(
                             {
-                                "uuid": im["uuid"],
+                                "uuid": im.uuid,
                                 "title": "",
                                 "content": "",
-                                "datetime": im["create_date"],
+                                "datetime": im.create_date,
                                 "alert_type": labels,
-                                "mediaUrl": im["path"],
+                                "mediaUrl": im.path,
                                 "videoUrl": [],
                                 "otherUrl": [],
                             }
                         )
-            cur.execute(
+            _ = cur.execute(
                 "update pic set predicted = 1 where id in ("
-                + ",".join([im["id"] for im in stream.images])
+                + ",".join([str(im["id"]) for im in stream.images])
                 + ")"
             )
             db.commit()
@@ -205,12 +224,12 @@ def loop_predict(
 
 
 if __name__ == "__main__":
-    # model = YOLO("yolo11n_best.pt")
-    # input_dir = "../dump"
-    # output_dir = "../static"
-    # for im in os.listdir(input_dir):
-    #     if im.lower().endswith((".jpg", ".png", ".jpeg")):
-    #         im_path = os.path.join(input_dir, im)
-    #         predict(model, input_dir, output_dir, im_path, im, 0.5)
+    model = YOLO("../model/yolo11n_visdrone.pt")
+    input_dir = "../dump"
+    output_dir = "../static"
+    for im in os.listdir(input_dir):
+        if im.lower().endswith((".jpg", ".png", ".jpeg")):
+            im_path = os.path.join(input_dir, im)
+            predict(model, input_dir, output_dir, im_path, im, 0.5)
 
-    loop_predict("../dump/../static/", 0.5, "../predict.db")
+    # loop_predict("../dump/", "../static/", "../predict.db", 30, 0.5)
