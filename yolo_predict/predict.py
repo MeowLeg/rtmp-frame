@@ -1,14 +1,12 @@
-from http.client import CREATED
 import os
 import cv2
 import sqlite3
 from cv2.typing import MatLike
-from pandas.core.apply import ResType
 import requests
 from time import sleep
 import numpy as np
-from ultralytics import YOLO
-from ultralytics.engine.results import Results, Boxes
+from ultralytics.models.yolo.model import YOLO
+from ultralytics.engine.results import Results
 from dataclasses import dataclass
 
 
@@ -19,9 +17,10 @@ MODELS = {
 }
 
 
-def split_image(image: MatLike, n: int = 2):
+def split_image(image: MatLike, n: int = 2) -> tuple[list[MatLike], list[tuple[int, int]]]:
     # 分割图片
-    h, w = image.shape[:2]
+    shape: tuple[int, int, int] = image.shape  # pyright: ignore[reportAny]
+    h, w = shape[:2]
     sub_h, sub_w = h // n, w // n
     sub_images: list[MatLike] = []
     positions: list[tuple[int, int]] = []
@@ -42,36 +41,37 @@ def detect_split_image(
 ):
     # 对分割的图片进行检测
     sub_images, positions = split_image(image, n=2)
-    all_boxes = []
+    all_boxes: list[list[float | int]] = []
 
     for sub_img, (x_offset, y_offset) in zip(sub_images, positions):
-        results: list[Results] = model(sub_img, conf=conf, iou=iou)
+        results: list[Results] = model(sub_img, conf=conf, iou=iou)  # pyright: ignore[reportUnknownVariableType]
         boxes = results[0].boxes
-        if boxes is None:
+        if boxes is None or len(boxes) == 0:
             continue
         for box in boxes:
-            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-            x1 += x_offset
-            y1 += y_offset
-            x2 += x_offset
-            y2 += y_offset
+            # xyxy: tensor([[730.1935, 276.2485, 804.1757, 315.5241]])
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy() # pyright: ignore[reportAny, reportUnknownMemberType]
+            x1 += x_offset # pyright: ignore[reportAny]
+            y1 += y_offset # pyright: ignore[reportAny]
+            x2 += x_offset # pyright: ignore[reportAny]
+            y2 += y_offset # pyright: ignore[reportAny]
 
-            cls = int(box.cls[0])
-            conf = float(box.conf[0])
-            all_boxes.append([x1, y1, x2, y2, conf, cls])
+            cls: int = int(box.cls[0])  # pyright: ignore[reportUnknownMemberType]
+            box_conf: float = float(box.conf[0]) # pyright: ignore[reportUnknownMemberType]
+            all_boxes.append([x1, y1, x2, y2, box_conf, cls])
 
     if not all_boxes:
         return np.array([])
-    all_boxes = np.array(all_boxes)
-    boxes = all_boxes[:, :4]
-    scores = all_boxes[:, 4]
-    nms_indices = cv2.dnn.NMSBoxes(boxes.tolist(), scores.tolist(), conf, iou)
+    n_all_boxes = np.array(all_boxes)
+    boxes = n_all_boxes[:, :4]
+    scores = n_all_boxes[:, 4]
+    nms_indices = cv2.dnn.NMSBoxes(boxes.tolist(), scores.tolist(), conf, iou) # pyright: ignore[reportAny]
     if len(nms_indices) == 0:
         return np.array([])
-    indices = (
+    indices = (  # pyright: ignore[reportUnknownVariableType]
         nms_indices.flatten() if isinstance(nms_indices, np.ndarray) else nms_indices[0]
     )
-    return all_boxes[indices]
+    return n_all_boxes[indices]  # pyright: ignore[reportAny]
 
     # yolo-11
     # pred = torch.tensor(all_boxes[:, :4], dtype=torch.float32),  # 框
@@ -86,24 +86,28 @@ def detect_split_image(
 
 
 def predict(
-    model: YOLO, in_path: str, out_path: str, im_path: str, im_name: str, conf: float
+    model: YOLO, out_path: str, im_path: str, im_name: str, conf: float
 ) -> list[str]:
-    image: MatLike = cv2.imread(im_path)
+    image: MatLike | None = cv2.imread(im_path)
+    if image is None:
+        return []
+
     merged_boxes = detect_split_image(model, image, conf=conf, iou=0.45)
 
-    labels_result = []
-    for box in merged_boxes:
-        x1, y1, x2, y2, conf, cls = box
-        cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        label = f"{model.names[int(cls)]} {conf: .2f}"
-        labels_result.append(model.names[int(cls)])
-        y1_text = int(y1) - 10
+    labels_result: list[str] = []
+    for box in merged_boxes:  # pyright: ignore[reportAny]
+        # float, float, float, float, float, int
+        x1, y1, x2, y2, conf, cls = box  # pyright: ignore[reportAny]
+        _ = cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)  # pyright: ignore[reportAny]
+        label = f"{model.names[int(cls)]} {conf: .2f}" # pyright: ignore[reportAny]
+        labels_result.append(model.names[int(cls)]) # pyright: ignore[reportAny]
+        y1_text = int(y1) - 10 # pyright: ignore[reportAny]
         if y1_text <= 0:
             y1_text = 0
         _ = cv2.putText(
             image,
             label,
-            (int(x1), y1_text),
+            (int(x1), y1_text), # pyright: ignore[reportAny]
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (0, 255, 0),
@@ -167,8 +171,18 @@ def filter_models(tags: list[str]) -> list[YOLO]:
     return [YOLO(m) for m in list(f_models.keys())]
 
 
+@dataclass
+class Alert:
+    uuid: str
+    title: str
+    content: str
+    datetime: str
+    alert_type: list[str]
+    mediaUrl: str
+    videoUrl: list[str]
+    otherUrl: list[str]
+
 def loop_predict(
-    input_dir: str,
     output_dir: str,
     db_path: str,
     interval: int,
@@ -179,14 +193,13 @@ def loop_predict(
     db.row_factory = sqlite3.Row
     cur = db.cursor()
     while True:
-        im_predicted = []
+        im_predicted: list[Alert] = []
         for stream in read_from_db(db_path):
             for im in stream.images:
                 im_name = os.path.basename(im.path)
                 for m in filter_models(stream.tags):
                     labels = predict(
                         m,
-                        input_dir,
                         output_dir,
                         im.path,
                         im_name,
@@ -194,20 +207,20 @@ def loop_predict(
                     )
                     if len(labels):
                         im_predicted.append(
-                            {
-                                "uuid": im.uuid,
-                                "title": "",
-                                "content": "",
-                                "datetime": im.create_date,
-                                "alert_type": labels,
-                                "mediaUrl": im.path,
-                                "videoUrl": [],
-                                "otherUrl": [],
-                            }
+                            Alert(
+                                im.uuid,
+                                "",
+                                "",
+                                im.create_date,
+                                labels,
+                                im.path,
+                                [],
+                                [],
+                            )
                         )
             _ = cur.execute(
                 "update pic set predicted = 1 where id in ("
-                + ",".join([str(im["id"]) for im in stream.images])
+                + ",".join([str(im.id) for im in stream.images])
                 + ")"
             )
             db.commit()
@@ -218,7 +231,7 @@ def loop_predict(
             # 正式环境
             # https://fh2.wifizs.cn/11005/v1/webhook/yoloalert
             response = requests.post(svr_url, json=p)
-            print(response.json())
+            print(response.text)
         # 等待
         sleep(interval)
 
@@ -230,6 +243,6 @@ if __name__ == "__main__":
     for im in os.listdir(input_dir):
         if im.lower().endswith((".jpg", ".png", ".jpeg")):
             im_path = os.path.join(input_dir, im)
-            predict(model, input_dir, output_dir, im_path, im, 0.5)
+            _ = predict(model, output_dir, im_path, im, 0.5)
 
     # loop_predict("../dump/", "../static/", "../predict.db", 30, 0.5)
