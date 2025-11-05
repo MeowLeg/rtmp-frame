@@ -11,7 +11,7 @@ use ort::{
 };
 use serde_json::{Value as SjValue, json};
 use std::{fs::create_dir_all, path::PathBuf};
-// pub mod div_predict;
+pub mod div_predict;
 
 #[allow(unused)]
 pub fn init() -> ort::Result<()> {

@@ -17,7 +17,9 @@ MODELS = {
 }
 
 
-def split_image(image: MatLike, n: int = 2) -> tuple[list[MatLike], list[tuple[int, int]]]:
+def split_image(
+    image: MatLike, n: int = 2
+) -> tuple[list[MatLike], list[tuple[int, int]]]:
     # 分割图片
     shape: tuple[int, int, int] = image.shape  # pyright: ignore[reportAny]
     h, w = shape[:2]
@@ -50,14 +52,14 @@ def detect_split_image(
             continue
         for box in boxes:
             # xyxy: tensor([[730.1935, 276.2485, 804.1757, 315.5241]])
-            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy() # pyright: ignore[reportAny, reportUnknownMemberType]
-            x1 += x_offset # pyright: ignore[reportAny]
-            y1 += y_offset # pyright: ignore[reportAny]
-            x2 += x_offset # pyright: ignore[reportAny]
-            y2 += y_offset # pyright: ignore[reportAny]
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()  # pyright: ignore[reportAny, reportUnknownMemberType]
+            x1 += x_offset  # pyright: ignore[reportAny]
+            y1 += y_offset  # pyright: ignore[reportAny]
+            x2 += x_offset  # pyright: ignore[reportAny]
+            y2 += y_offset  # pyright: ignore[reportAny]
 
             cls: int = int(box.cls[0])  # pyright: ignore[reportUnknownMemberType]
-            box_conf: float = float(box.conf[0]) # pyright: ignore[reportUnknownMemberType]
+            box_conf: float = float(box.conf[0])  # pyright: ignore[reportUnknownMemberType]
             all_boxes.append([x1, y1, x2, y2, box_conf, cls])
 
     if not all_boxes:
@@ -65,7 +67,7 @@ def detect_split_image(
     n_all_boxes = np.array(all_boxes)
     boxes = n_all_boxes[:, :4]
     scores = n_all_boxes[:, 4]
-    nms_indices = cv2.dnn.NMSBoxes(boxes.tolist(), scores.tolist(), conf, iou) # pyright: ignore[reportAny]
+    nms_indices = cv2.dnn.NMSBoxes(boxes.tolist(), scores.tolist(), conf, iou)  # pyright: ignore[reportAny]
     if len(nms_indices) == 0:
         return np.array([])
     indices = (  # pyright: ignore[reportUnknownVariableType]
@@ -99,15 +101,15 @@ def predict(
         # float, float, float, float, float, int
         x1, y1, x2, y2, conf, cls = box  # pyright: ignore[reportAny]
         _ = cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)  # pyright: ignore[reportAny]
-        label = f"{model.names[int(cls)]} {conf: .2f}" # pyright: ignore[reportAny]
-        labels_result.append(model.names[int(cls)]) # pyright: ignore[reportAny]
-        y1_text = int(y1) - 10 # pyright: ignore[reportAny]
+        label = f"{model.names[int(cls)]} {conf: .2f}"  # pyright: ignore[reportAny]
+        labels_result.append(model.names[int(cls)])  # pyright: ignore[reportAny]
+        y1_text = int(y1) - 10  # pyright: ignore[reportAny]
         if y1_text <= 0:
             y1_text = 0
         _ = cv2.putText(
             image,
             label,
-            (int(x1), y1_text), # pyright: ignore[reportAny]
+            (int(x1), y1_text),  # pyright: ignore[reportAny]
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (0, 255, 0),
@@ -182,6 +184,7 @@ class Alert:
     videoUrl: list[str]
     otherUrl: list[str]
 
+
 def loop_predict(
     output_dir: str,
     db_path: str,
@@ -237,12 +240,16 @@ def loop_predict(
 
 
 if __name__ == "__main__":
-    model = YOLO("../model/yolo11n_visdrone.pt")
-    input_dir = "../dump"
-    output_dir = "../static"
-    for im in os.listdir(input_dir):
-        if im.lower().endswith((".jpg", ".png", ".jpeg")):
-            im_path = os.path.join(input_dir, im)
-            _ = predict(model, output_dir, im_path, im, 0.5)
+    # model = YOLO("../model/yolo11n_visdrone.pt")
+    # input_dir = "../dump"
+    # output_dir = "../static"
+    # for im in os.listdir(input_dir):
+    #     if im.lower().endswith((".jpg", ".png", ".jpeg")):
+    #         im_path = os.path.join(input_dir, im)
+    #         _ = predict(model, output_dir, im_path, im, 0.5)
 
     # loop_predict("../dump/", "../static/", "../predict.db", 30, 0.5)
+
+    im = cv2.imread("../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg")
+    rslt = split_image(im, 2)
+    print(rslt)

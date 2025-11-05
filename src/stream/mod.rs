@@ -43,7 +43,7 @@ pub async fn stream(
         v_dctx.format(),
         v_dctx.width(),
         v_dctx.height(),
-        ffmpeg_next::format::Pixel::RGB24,
+        ffmpeg_next::format::Pixel::RGB8,
         v_dctx.width(),
         v_dctx.height(),
         scaling::Flags::BILINEAR,
