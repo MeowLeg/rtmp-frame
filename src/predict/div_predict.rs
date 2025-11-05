@@ -116,6 +116,8 @@ fn predict_img(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -125,9 +127,19 @@ mod tests {
             .commit_from_file("./model/yolo11n_visdrone.onnx")?;
         let meta = session.metadata()?;
         println!("meta keys: {:?}", meta.custom_keys());
+        // 显然是直接传入labels比较正确且方便
         //meta: Ok(Some("{0: 'pedestrian', 1: 'people', 2: 'bicycle', 3: 'car', 4: 'van', 5: 'truck', 6: 'tricycle', 7: 'awning-tricycle', 8: 'bus', 9: 'motor'}"))
-        let names = meta.custom("names")?;
-        println!("meta: {:?}", names);
+        let names = meta.custom("names")?.unwrap_or("{}".into());
+        println!("names: {}", &names);
+        let labels: HashMap<i32, String> = match serde_json::from_str(&names) {
+            Ok(labels) => labels,
+            Err(e) => {
+                eprintln!("Failed to parse labels: {}", e);
+                HashMap::new()
+            }
+        };
+
+        println!("laebels: {:?}", &labels);
 
         for (idx, inf) in session.inputs.iter().enumerate() {
             // name: "images"
