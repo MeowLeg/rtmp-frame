@@ -1,14 +1,14 @@
 import os
-import cv2
 import sqlite3
-from cv2.typing import MatLike
-import requests
-from time import sleep
-import numpy as np
-from ultralytics.models.yolo.model import YOLO
-from ultralytics.engine.results import Results
 from dataclasses import dataclass
+from time import sleep
 
+import cv2
+import numpy as np
+import requests
+from cv2.typing import MatLike
+from ultralytics.engine.results import Results
+from ultralytics.models.yolo.model import YOLO
 
 # 实现的模型
 MODELS = {
@@ -250,6 +250,15 @@ if __name__ == "__main__":
 
     # loop_predict("../dump/", "../static/", "../predict.db", 30, 0.5)
 
-    im = cv2.imread("../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg")
-    rslt = split_image(im, 2)
-    print(rslt)
+    # im = cv2.imread("../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg")
+    # im = cv2.imread("../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174126_4440.jpg")
+    # rslt = split_image(im, 2)
+    # print(rslt)
+
+    predict(
+        YOLO("../model/yolo11n_visdrone.pt"),
+        "../static/",
+        "../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
+        "f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
+        0.5,
+    )
