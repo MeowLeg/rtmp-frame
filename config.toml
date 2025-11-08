@@ -14,6 +14,15 @@ rtmp_max_timeout = 1800 # rtmp流dump最长的持续时间
 main_cmd = "rtmp-frame" # 工程运行的命令
 is_test = true
 
+[div_predict]
+model = "./model/yolo11n_visdrone.onnx"
+in_dir = "./dump"
+out_dir = "./static/"
+conf = 0.5
+iou = 0.7
+n = 2
+labels = ['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']
+
 
 [[predict]]
 tag = "swim"  # 通知数据结构等的需要

@@ -1,11 +1,13 @@
 use super::*;
-use image::{GenericImage, RgbImage, Rgb};
+// use ffmpeg_next::{ffi::AV_LOG_PRINT_LEVEL, software::scaling::support::output};
+use image::{GenericImage, Rgb, RgbImage};
 use ort::{
     inputs,
     session::Session,
     value::{Tensor, TensorValueType, Value},
 };
-use std::path::PathBuf;
+use std::fs::read_dir;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy)]
 struct BBox {
@@ -44,11 +46,14 @@ fn split_image(image: &mut RgbImage, n: u32) -> Result<(Vec<RgbImage>, Vec<(u32,
 
 fn letterbox_resize(image: &RgbImage, target_size: usize) -> Result<RgbImage> {
     let (orig_w, orig_h) = image.dimensions();
+    // println!("Original dimensions: {}x{}", orig_w, orig_h);
 
     let scale = target_size as f32 / orig_w.max(orig_h) as f32;
+    // println!("Scale: {}", scale);
 
     let scaled_w = (orig_w as f32 * scale).round();
     let scaled_h = (orig_h as f32 * scale).round();
+    // println!("Scaled dimensions: {}x{}", scaled_w, scaled_h);
 
     let padding_w = (target_size as f32 - scaled_w) / 2.0;
     let padding_h = (target_size as f32 - scaled_h) / 2.0;
@@ -85,7 +90,7 @@ fn preprocess_image(img: &RgbImage, target_size: usize) -> Result<Value<TensorVa
     //     image::imageops::FilterType::Lanczos3,
     // );
     let resized_img = letterbox_resize(img, target_size)?;
-    println!("dimensions after resize: {:?}", resized_img.dimensions());
+    // println!("dimensions after resize: {:?}", resized_img.dimensions());
     const BATCH_SIZE: usize = 1;
     const CHANNELS: usize = 3;
     let data_len = BATCH_SIZE * CHANNELS * target_size as usize * target_size as usize;
@@ -219,7 +224,7 @@ fn visualize_detections(
     image_path: &PathBuf,
     bboxes: Vec<BBox>,
     out_pf: &PathBuf,
-    labels: &[&'static str],
+    labels: &[String],
 ) -> Result<()> {
     // Load the original image
     let mut img = image::open(image_path)?.to_rgb8();
@@ -254,18 +259,16 @@ fn visualize_detections(
 }
 
 fn predict(
-    model_path: &str,
+    // model_path: &str,
+    session: &mut Session,
     img_path: &str,
     out_dir: &str,
     conf: f32,
     iou: f32,
     n: u32,
     target_size: usize,
-    labels: Vec<&'static str>,
+    labels: &[String],
 ) -> Result<()> {
-    let mut session = Session::builder()?
-        .with_execution_providers([CUDAExecutionProvider::default().build()])?
-        .commit_from_file(model_path)?;
     let mut image: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(img_path)?.into_rgb8();
 
     let (sub_rgb_images, positions) = split_image(&mut image, n)?;
@@ -274,7 +277,7 @@ fn predict(
     for (sub_image, position) in sub_rgb_images.into_iter().zip(positions) {
         let input_tensor_data = preprocess_image(&sub_image, target_size)?;
         let bboxes = predict_image(
-            &mut session,
+            session,
             conf,
             &sub_image,
             target_size,
@@ -288,7 +291,58 @@ fn predict(
     let out_image = PathBuf::from(out_dir).join(in_image_name);
     let out_ordered_boxes = merge_boexs(bboxes_vec, iou);
     println!("out_ordered_boxes: {:?}", &out_ordered_boxes);
-    let _ = visualize_detections(&in_image, out_ordered_boxes, &out_image, &labels)?;
+    if !out_ordered_boxes.is_empty() {
+        let _ = visualize_detections(&in_image, out_ordered_boxes, &out_image, &labels)?;
+    }
+
+    Ok(())
+}
+
+pub fn predict_dir(
+    model_path: &str,
+    in_dir: &str,
+    out_dir: &str,
+    conf: f32,
+    iou: f32,
+    labels: &[String],
+    n: u32,
+) -> Result<()> {
+    // let model_path = "./model/yolo11n_visdrone.onnx";
+    let mut session = Session::builder()?
+        .with_execution_providers([CUDAExecutionProvider::default().build()])?
+        .commit_from_file(model_path)?;
+    for entry in read_dir(Path::new(in_dir))? {
+        let entry = entry?;
+        let ep = entry.path();
+        if ep.is_file() {
+            let im_path = ep.to_str().unwrap();
+            // println!("im_path: {}", im_path);
+            let _ = predict(
+                &mut session,
+                im_path,
+                out_dir,
+                // 0.5,
+                // 0.7,
+                conf,
+                iou,
+                n,
+                640,
+                labels
+                // vec![
+                //     "pedestrian",
+                //     "people",
+                //     "bicycle",
+                //     "car",
+                //     "van",
+                //     "truck",
+                //     "tricycle",
+                //     "awning-tricycle",
+                //     "bus",
+                //     "motor",
+                // ],
+            )?;
+        }
+    }
 
     Ok(())
 }
@@ -297,7 +351,11 @@ fn predict(
 mod tests {
     use std::collections::HashMap;
 
+    use serde_json::map::Entry;
+
     use super::*;
+    use std::fs::*;
+    use std::path::Path;
 
     #[test]
     fn test_div_predict() -> Result<()> {
@@ -339,27 +397,39 @@ mod tests {
         //     let box = predict_img(&mut session, input_tensor, labels, conf, img, target_size)
         // }
 
-        let _ = predict(
-            "./model/yolo11n_visdrone_dynamic.onnx",
-            "./dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
-            "./static/",
-            0.5,
-            0.7,
-            2,
-            640,
-            vec![
-                "pedestrian",
-                "people",
-                "bicycle",
-                "car",
-                "van",
-                "truck",
-                "tricycle",
-                "awning-tricycle",
-                "bus",
-                "motor",
-            ],
-        )?;
+        let model_path = "./model/yolo11n_visdrone.onnx";
+        let mut session = Session::builder()?
+            .with_execution_providers([CUDAExecutionProvider::default().build()])?
+            .commit_from_file(model_path)?;
+        for entry in read_dir(Path::new("./dump"))? {
+            let entry = entry?;
+            let ep = entry.path();
+            if ep.is_file() {
+                let im_path = ep.to_str().unwrap();
+                println!("im_path: {}", im_path);
+                let _ = predict(
+                    &mut session,
+                    im_path,
+                    "./static/",
+                    0.5,
+                    0.7,
+                    2,
+                    640,
+                    &vec![
+                        "pedestrian".to_string(),
+                        "people".to_string(),
+                        "bicycle".to_string(),
+                        "car".to_string(),
+                        "van".to_string(),
+                        "truck".to_string(),
+                        "tricycle".to_string(),
+                        "awning-tricycle".to_string(),
+                        "bus".to_string(),
+                        "motor".to_string(),
+                    ],
+                )?;
+            }
+        }
         assert!(true);
         Ok(())
     }

@@ -240,13 +240,13 @@ def loop_predict(
 
 
 if __name__ == "__main__":
-    # model = YOLO("../model/yolo11n_visdrone.pt")
-    # input_dir = "../dump"
-    # output_dir = "../static"
-    # for im in os.listdir(input_dir):
-    #     if im.lower().endswith((".jpg", ".png", ".jpeg")):
-    #         im_path = os.path.join(input_dir, im)
-    #         _ = predict(model, output_dir, im_path, im, 0.5)
+    model = YOLO("../model/yolo11n_visdrone.pt")
+    input_dir = "../dump"
+    output_dir = "../static"
+    for im in os.listdir(input_dir):
+        if im.lower().endswith((".jpg", ".png", ".jpeg")):
+            im_path = os.path.join(input_dir, im)
+            _ = predict(model, output_dir, im_path, im, 0.5)
 
     # loop_predict("../dump/", "../static/", "../predict.db", 30, 0.5)
 
@@ -255,10 +255,10 @@ if __name__ == "__main__":
     # rslt = split_image(im, 2)
     # print(rslt)
 
-    predict(
-        YOLO("../model/yolo11n_visdrone.pt"),
-        "../static/",
-        "../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
-        "f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
-        0.5,
-    )
+    # predict(
+    #     YOLO("../model/yolo11n_visdrone.pt"),
+    #     "../static/",
+    #     "../dump/f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
+    #     "f353e1b849e5f8f5e6b740359f0c5858_20251029174000_2280.jpg",
+    #     0.5,
+    # )

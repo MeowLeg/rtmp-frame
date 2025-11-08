@@ -42,6 +42,7 @@ pub struct Config {
     pub static_dir: String,
     pub svr_root_url: String,
     pub predict: Vec<Predict>,
+    pub div_predict: DivPredict,
     pub is_test: bool,
     pub frame_interval_count: u32,
     pub watch_interval: u64,
@@ -58,6 +59,17 @@ pub struct Predict {
     pub pipe: String,
     pub imgsz: usize,
     pub label: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DivPredict {
+    pub model: String,
+    pub in_dir: String,
+    pub out_dir: String,
+    pub conf: f32,
+    pub iou: f32,
+    pub n: u32,
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -95,15 +107,9 @@ enum Commands {
 
     /// 预测子进程应与Web服务在一起，此处保留单独命令，用于方便增减
     Predict,
-    // 使用分割检测某张图片
-    // DivPredict {
-    //     #[arg(long)]
-    //     model: String,
-    //     #[arg(long)]
-    //     pic: String,
-    //     #[arg(long)]
-    //     out_dir: String,
-    // },
+
+    /// 使用分割检测某张图片
+    DivPredict,
 }
 
 pub fn read_from_toml(f: &str) -> Result<Config> {
@@ -159,18 +165,18 @@ async fn main() -> Result<()> {
             // 去掉redis
             return predict::predict(&cfg).await;
         }
-        // Some(Commands::DivPredict {
-        //     model,
-        //     pic,
-        //     out_dir,
-        // }) => {
-        //     // 使用分割模型对某张图片进行预测
-        //     return div_predict::div_predict(
-        //         &model,
-        //         &pic,
-        //         &out_dir,
-        //     );
-        // },
+        Some(Commands::DivPredict) => {
+            // 使用分割模型对某张图片进行预测
+            return div_predict::predict_dir(
+                &cfg.div_predict.model,
+                &cfg.div_predict.in_dir,
+                &cfg.div_predict.out_dir,
+                cfg.div_predict.conf,
+                cfg.div_predict.iou,
+                &cfg.div_predict.labels,
+                cfg.div_predict.n,
+            );
+        },
         None => {}
     }
 
