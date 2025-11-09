@@ -2,26 +2,88 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from time import sleep
+from typing import Any, Union
 
 import cv2
 import numpy as np
 import requests
+import tomli
 from cv2.typing import MatLike
 from ultralytics.engine.results import Results
 from ultralytics.models.yolo.model import YOLO
 
-# 实现的模型
-MODELS = {
-    "swim_reservoir": "../model/yolo11n_visdrone.pt",  # 可以有多种类型的判断
-    "fire_forest": "../model/fire_tolo8_small.pt",
-}
+# ---------------数据结构-----------------
+
+
+@dataclass
+class Prediction:
+    tag: str
+    title: str
+    content: str
+    model: str
+    pipe: str  # 没用，不再用redis
+    imgsz: int
+    labels: list[str]
+    conf: float
+    iou: float
+    split: int
+
+
+@dataclass
+class Config:
+    port: int
+    redis_svr_url: str
+    db_path: str
+    dump_path: str
+    predict_worker_num: int
+    notify_svr_url: str
+    notify_timeout: int
+    redis_stream_tag: int
+    static_dir: str
+    svr_root_url: str
+    frame_interval_count: int
+    watch_interval: int
+    rtmp_max_timeout: int
+    main_cmd: int
+    is_test: bool
+    predicts: list[Prediction]
+
+
+@dataclass
+class Image:
+    id: str
+    path: str
+    uuid: str
+    create_date: str
+
+
+@dataclass
+class Stream:
+    uuid: str
+    codes: list[str]  # 检测场景代码列表
+    images: list[Image]  # 需要检测的图片列表
+
+
+@dataclass
+class Alert:
+    uuid: str
+    title: str
+    content: str
+    datetime: str
+    alert_type: list[str]
+    mediaUrl: str
+    videoUrl: list[str]
+    otherUrl: list[str]
+
+
+# ---------------方法定义-----------------
 
 
 def split_image(
     image: MatLike, n: int = 2
 ) -> tuple[list[MatLike], list[tuple[int, int]]]:
     # 分割图片
-    shape: tuple[int, int, int] = image.shape  # pyright: ignore[reportAny]
+    shape: tuple[int, int, int] = image.shape  # pyright: ignore[reportAssignmentType]
     h, w = shape[:2]
     sub_h, sub_w = h // n, w // n
     sub_images: list[MatLike] = []
@@ -43,7 +105,7 @@ def detect_split_image(
 ):
     # 对分割的图片进行检测
     sub_images, positions = split_image(image, n=2)
-    all_boxes: list[list[float | int]] = []
+    all_boxes: list[list[Union[float, int]]] = []
 
     for sub_img, (x_offset, y_offset) in zip(sub_images, positions):
         results: list[Results] = model(sub_img, conf=conf, iou=iou)  # pyright: ignore[reportUnknownVariableType]
@@ -75,34 +137,32 @@ def detect_split_image(
     )
     return n_all_boxes[indices]  # pyright: ignore[reportAny]
 
-    # yolo-11
-    # pred = torch.tensor(all_boxes[:, :4], dtype=torch.float32),  # 框
-    # pred = (torch.tensor(all_boxes[:, :4]), torch.tensor(all_boxes[:, 4]), torch.tensor(all_boxes[:, 5]))
-    # # 使用 YOLO 内置 NMS
-    # nms_results = non_max_suppression(
-    #     prediction=pred,
-    #     conf_thres=conf,
-    #     iou_thres=iou
-    # )[0]  # 返回 tensor
-    # return nms_results.cpu().numpy()
-
 
 def predict(
-    model: YOLO, out_path: str, im_path: str, im_name: str, conf: float
-) -> list[str]:
+    model: YOLO,
+    out_path: str,
+    im_path: str,
+    im_name: str,
+    pdct: Prediction,
+) -> bool:
     image: MatLike | None = cv2.imread(im_path)
     if image is None:
-        return []
+        return False
+    merged_boxes = detect_split_image(model, image, pdct.conf, pdct.iou)
 
-    merged_boxes = detect_split_image(model, image, conf=conf, iou=0.45)
-
-    labels_result: list[str] = []
+    detected = False
     for box in merged_boxes:  # pyright: ignore[reportAny]
         # float, float, float, float, float, int
         x1, y1, x2, y2, conf, cls = box  # pyright: ignore[reportAny]
         _ = cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)  # pyright: ignore[reportAny]
+
+        cate_label = model.names[int(cls)]
+        if cate_label == pdct.tag and not detected:
+            # 仅当标签与预测标签相同时才添加到结果列表中
+            detected = True
+
+        # 绘框
         label = f"{model.names[int(cls)]} {conf: .2f}"  # pyright: ignore[reportAny]
-        labels_result.append(model.names[int(cls)])  # pyright: ignore[reportAny]
         y1_text = int(y1) - 10  # pyright: ignore[reportAny]
         if y1_text <= 0:
             y1_text = 0
@@ -117,29 +177,11 @@ def predict(
         )
         _ = cv2.imwrite(os.path.join(out_path, im_name), image)
 
-    return labels_result
+    return detected
 
 
-@dataclass
-class Image:
-    id: str
-    path: str
-    uuid: str
-    create_date: str
-
-
-@dataclass
-class Stream:
-    uuid: str
-    tags: list[str]
-    images: list[Image]
-
-
-def read_from_db(db_path: str) -> list[Stream]:
+def read_from_db(cur: sqlite3.Cursor) -> list[Stream]:
     # 从数据库读取图片进行检测
-    db = sqlite3.connect(db_path)
-    db.row_factory = sqlite3.Row
-    cur = db.cursor()
     streams: list[Stream] = []
     rs: list[sqlite3.Row] = cur.execute("""
         select uuid from stream where is_over = 0
@@ -163,60 +205,42 @@ def read_from_db(db_path: str) -> list[Stream]:
     return streams
 
 
-def filter_models(tags: list[str]) -> list[YOLO]:
+def filter_models(
+    codes: list[str], cfg_predicts: list[Prediction]
+) -> list[tuple[YOLO, Prediction]]:
     # 列出实现的模型
-    # 类似SET
-    f_models: dict[str, None] = {}
-    for tag in tags:
-        if MODELS[tag]:
-            f_models[MODELS[tag]] = None
-    return [YOLO(m) for m in list(f_models.keys())]
-
-
-@dataclass
-class Alert:
-    uuid: str
-    title: str
-    content: str
-    datetime: str
-    alert_type: list[str]
-    mediaUrl: str
-    videoUrl: list[str]
-    otherUrl: list[str]
+    return [(YOLO(p.model), p) for p in cfg_predicts if p.tag in codes]
 
 
 def loop_predict(
-    output_dir: str,
-    db_path: str,
-    interval: int,
-    conf: float = 0.5,
+    cfg: dict[str, Any],
 ) -> None:
     # 循环检测
-    db = sqlite3.connect(db_path)
+    db = sqlite3.connect(cfg["db_path"])
     db.row_factory = sqlite3.Row
     cur = db.cursor()
     while True:
         im_predicted: list[Alert] = []
-        for stream in read_from_db(db_path):
+        for stream in read_from_db(cur):
             for im in stream.images:
                 im_name = os.path.basename(im.path)
-                for m in filter_models(stream.tags):
-                    labels = predict(
-                        m,
-                        output_dir,
+                # for m in filter_models(stream.codes):
+                for yolo, prediction in filter_models(stream.codes, cfg["predicts"]):
+                    if predict(
+                        yolo,
+                        cfg["static_path"],
                         im.path,
                         im_name,
-                        conf,
-                    )
-                    if len(labels):
+                        prediction,
+                    ):
                         im_predicted.append(
                             Alert(
                                 im.uuid,
                                 "",
                                 "",
                                 im.create_date,
-                                labels,
-                                im.path,
+                                [prediction.tag],
+                                im.path,  # todo: 需要更换成网络地址
                                 [],
                                 [],
                             )
@@ -236,17 +260,26 @@ def loop_predict(
             response = requests.post(svr_url, json=p)
             print(response.text)
         # 等待
-        sleep(interval)
+        sleep(cfg["watch_interval"])
+
+
+def main():
+    with open("./config.toml", "rb") as f:
+        cfg: dict[str, Any] = tomli.load(f)  #  pyright: ignore[reportAny]
+        loop_predict(cfg)
 
 
 if __name__ == "__main__":
-    model = YOLO("../model/yolo11n_visdrone.pt")
-    input_dir = "../dump"
-    output_dir = "../static"
-    for im in os.listdir(input_dir):
-        if im.lower().endswith((".jpg", ".png", ".jpeg")):
-            im_path = os.path.join(input_dir, im)
-            _ = predict(model, output_dir, im_path, im, 0.5)
+    os.chdir("..")  # 到项目顶层
+    main()
+
+    # model = YOLO("../model/yolo11n_visdrone.pt")
+    # input_dir = "../dump"
+    # output_dir = "../static"
+    # for im in os.listdir(input_dir):
+    #     if im.lower().endswith((".jpg", ".png", ".jpeg")):
+    #         im_path = os.path.join(input_dir, im)
+    #         _ = predict(model, output_dir, im_path, im, 0.5)
 
     # loop_predict("../dump/", "../static/", "../predict.db", 30, 0.5)
 

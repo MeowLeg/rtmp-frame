@@ -34,6 +34,8 @@ create table if not exists stream (
     create_date text default (strftime('%Y-%m-%d %H:%M:%S', datetime('now', 'localtime')))
 );
 
+-- 每个流都有对应的相关信息，包括uuid和一个数组，该数组里有需要检测的场景名称与code
+-- 由于这个数组的存在，必须另建立一张表，否则需要在stream表中加个json字段
 create table if not exists stream_tag (
     id integer primary key autoincrement,
     uuid text not null default '',

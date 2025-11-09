@@ -304,7 +304,7 @@ pub async fn predict(cfg: &Config) -> Result<()> {
                 create_dir_all(p)?;
             }
 
-            match _predict(&mut m, &pf, p.imgsz, &p.tag, &p.label, &out_pf) {
+            match _predict(&mut m, &pf, p.imgsz, &p.tag, &p.labels, &out_pf) {
                 Ok(()) => {
                     let output_url = format!(
                         "{}/static/{}",

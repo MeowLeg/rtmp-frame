@@ -58,7 +58,10 @@ pub struct Predict {
     pub model: String,
     pub pipe: String,
     pub imgsz: usize,
-    pub label: Vec<String>,
+    pub labels: Vec<String>,
+    pub conf: f32,
+    pub iou: f32,
+    pub split: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,7 +179,7 @@ async fn main() -> Result<()> {
                 &cfg.div_predict.labels,
                 cfg.div_predict.n,
             );
-        },
+        }
         None => {}
     }
 

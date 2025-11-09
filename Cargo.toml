@@ -11,8 +11,8 @@ clap = { version = "*", features = [ "derive" ] }
 anyhow = "*"
 ort = "2.0.0-rc.10"
 ndarray = "0.16"
-ort-candle = { version = "*", optional = true }
-ort-tract = { version = "*", optional = true }
+# ort-candle = { version = "*", optional = true }
+# ort-tract = { version = "*", optional = true }
 chrono = "*"
 # rusttype = "0.9"
 ab_glyph = "*"

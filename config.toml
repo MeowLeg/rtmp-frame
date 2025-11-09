@@ -18,22 +18,35 @@ is_test = true
 model = "./model/yolo11n_visdrone.onnx"
 in_dir = "./dump"
 out_dir = "./static/"
-conf = 0.5
+conf = 0.75
 iou = 0.7
 n = 2
 labels = ['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']
 
 
 [[predict]]
-tag = "swim"  # 通知数据结构等的需要
+tag = "swimmer"  # 通知数据结构等的需要，与label配合筛选出指定的场景
 title = "游泳警告"  # 通知数据结构需要
 content = ""  # 通知数据结构需要
-# model = "./model/swim_yolo8_nano.onnx"
-model = "./model/swim_drone_yolo8_nano_720.onnx"
-pipe = "xinlan_predict_0001_swim"
-imgsz = 736
-# label = ["person",]
-label = ['boat', 'buoy', 'jetski', 'life_saving_appliances', 'swimmer']
+model = "./model/swim_yolo8_nano.onnx"
+pipe = ""
+imgsz = 640
+labels = ["boat", "buoy", "jetski", "life_saving_appliances", "swimmer"]
+conf = 0.7
+iou = 0.7
+split = 2
+
+[[predict]]
+tag = "fire"
+title = "火灾警告"  # 通知数据结构需要
+content = "fire_yolo8_small.pt"  # 通知数据结构需要
+model = "./model/"
+pipe = ""
+imgsz = 640
+labels = ["fire"]
+conf = 0.7
+iou = 0.7
+split = 2
 
 # rtmp://play-sh.quklive.com/live/1761274636335259
 # project_uuid: 358f2d9b-a54e-41c9-a7c2-dd1228d97847
