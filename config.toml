@@ -39,13 +39,25 @@ split = 2
 [[predict]]
 tag = "fire"
 title = "火灾警告"  # 通知数据结构需要
-content = "fire_yolo8_small.pt"  # 通知数据结构需要
-model = "./model/"
+content = ""  # 通知数据结构需要
+model = "./model/fire_yolo8_small.pt"
 pipe = ""
 imgsz = 640
 labels = ["fire"]
 conf = 0.7
 iou = 0.7
+split = 2
+
+[[predict]]
+tag = "water"
+title = "水体"
+content = ""
+model = "./model/yolov11n_water.pt"
+pipe = ""
+imgsz = 640
+labels = ["water"]
+conf = 0.9
+iou = 0.8
 split = 2
 
 # rtmp://play-sh.quklive.com/live/1761274636335259

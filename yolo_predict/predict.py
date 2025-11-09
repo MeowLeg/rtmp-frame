@@ -9,6 +9,7 @@ import numpy as np
 import requests
 import tomli
 from cv2.typing import MatLike
+from torch.utils import data
 from ultralytics.engine.results import Results
 from ultralytics.models.yolo.model import YOLO
 
@@ -27,6 +28,7 @@ class Prediction:
     conf: float
     iou: float
     split: int
+    yolo: YOLO
 
 
 @dataclass
@@ -205,11 +207,9 @@ def read_from_db(cur: sqlite3.Cursor) -> list[Stream]:
     return streams
 
 
-def filter_models(
-    codes: list[str], cfg_predicts: list[Prediction]
-) -> list[tuple[YOLO, Prediction]]:
+def filter_models(codes: list[str], cfg_predicts: list[Prediction]) -> list[Prediction]:
     # 列出实现的模型
-    return [(YOLO(p.model), p) for p in cfg_predicts if p.tag in codes]
+    return [p for p in cfg_predicts if p.tag in codes]
 
 
 def loop_predict(
@@ -225,9 +225,9 @@ def loop_predict(
             for im in stream.images:
                 im_name = os.path.basename(im.path)
                 # for m in filter_models(stream.codes):
-                for yolo, prediction in filter_models(stream.codes, cfg["predicts"]):
+                for prediction in filter_models(stream.codes, cfg["predicts"]):
                     if predict(
-                        yolo,
+                        prediction.yolo,
                         cfg["static_path"],
                         im.path,
                         im_name,
@@ -266,12 +266,38 @@ def loop_predict(
 def main():
     with open("./config.toml", "rb") as f:
         cfg: dict[str, Any] = tomli.load(f)  #  pyright: ignore[reportAny]
+        dataclass_prediction_list = []
+        for p in cfg["predict"]:
+            p["yolo"] = YOLO(p["model"])
+            dataclass_prediction_list.append(Prediction(**p))
+        cfg["predict"] = dataclass_prediction_list
         loop_predict(cfg)
+
+
+def predict_dir(codes: list[str]) -> None:
+    with open("./config.toml", "rb") as f:
+        cfg: dict[str, Any] = tomli.load(f)  #  pyright: ignore[reportAny]
+        dataclass_prediction_list = []
+        for p in cfg["predict"]:
+            p["yolo"] = YOLO(p["model"])
+            dataclass_prediction_list.append(Prediction(**p))
+        cfg["predict"] = dataclass_prediction_list
+        for im in os.listdir("./dump"):
+            im_path = os.path.join(cfg["dump_path"], im)
+            for prediction in filter_models(codes, cfg["predict"]):
+                predict(
+                    prediction.yolo,
+                    cfg["static_dir"],
+                    im_path,
+                    im,
+                    prediction,
+                )
 
 
 if __name__ == "__main__":
     os.chdir("..")  # 到项目顶层
-    main()
+    # main()
+    predict_dir(["water"])
 
     # model = YOLO("../model/yolo11n_visdrone.pt")
     # input_dir = "../dump"
