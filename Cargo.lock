@@ -2476,6 +2476,7 @@ dependencies = [
  "ab_glyph",
  "anyhow",
  "axum",
+ "backtrace",
  "chrono",
  "clap",
  "ffmpeg-next",

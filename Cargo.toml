@@ -37,7 +37,8 @@ sqlx = { version = "0.6", features = [
 # onnxruntime = "*"
 
 
-# [build-dependencies]
+[build-dependencies]
+backtrace = "0.3"
 # onnxruntime-sys = "^0.0.14"
 
 # [features]

@@ -35,6 +35,7 @@ labels = ["boat", "buoy", "jetski", "life_saving_appliances", "swimmer"]
 conf = 0.7
 iou = 0.7
 split = 2
+# compose_in = "water"
 
 [[predict]]
 tag = "fire"

@@ -38,12 +38,18 @@ pub async fn stream(
     let start_time = Instant::now();
 
     let mut v_dctx = dctx.decoder().video()?;
+    println!(
+        "format is {:?}, width is {}, height is {}",
+        v_dctx.format(),
+        v_dctx.width(),
+        v_dctx.height()
+    );
 
     let mut scaler = scaling::Context::get(
         v_dctx.format(),
         v_dctx.width(),
         v_dctx.height(),
-        ffmpeg_next::format::Pixel::RGB8,
+        ffmpeg_next::format::Pixel::RGB24,
         v_dctx.width(),
         v_dctx.height(),
         scaling::Flags::BILINEAR,
@@ -63,8 +69,16 @@ pub async fn stream(
     // 处理输入包
     for (stream, packet) in ictx.packets() {
         if stream.index() == video_stream_index {
+            // 时间戳
             // 将包发送到解码器
-            v_dctx.send_packet(&packet).context("发送数据包失败")?;
+            match v_dctx.send_packet(&packet).context("发送数据包失败") {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("发送数据包错误: {:?}", e);
+                    continue;
+                }
+            };
+
 
             // 从解码器接收帧
             let mut decoded_frame = frame::Video::empty();
@@ -72,14 +86,19 @@ pub async fn stream(
                 frame_count += 1;
 
                 // 在这里处理解码后的帧
-                let width = decoded_frame.width();
-                let height = decoded_frame.height();
-                let format = decoded_frame.format();
+                // let width = decoded_frame.width();
+                // let height = decoded_frame.height();
+                // let format = decoded_frame.format();
 
                 // 示例：打印帧信息
                 if frame_count.is_multiple_of(cfg.frame_interval_count) {
+                    let pts = decoded_frame.pts().unwrap_or(0);
+                    let timebase = stream.time_base();
+                    let timebase_num = timebase.numerator() as i64;
+                    let timebase_den = timebase.denominator() as i64;
+
                     // 自定义帧处理逻辑...
-                    process_frame(
+                    match process_frame(
                         &mut scaler,
                         &decoded_frame,
                         frame_count,
@@ -89,28 +108,37 @@ pub async fn stream(
                         &stream_md5_val,
                         &project_uuid,
                         &organization_uuid,
+                        pts * timebase_num / timebase_den,
                     )
-                    .await?;
+                    .await {
+                        Ok(_) => {},
+                        Err(e) => {
+                            println!("处理帧错误: {:?}", e);
+                        }
+                    }
 
                     // 每30帧打印一次
                     let elapsed = start_time.elapsed().as_secs_f64();
                     if cfg.is_test {
                         println!(
-                            "已处理 {} 帧 | 帧率: {:.2} FPS | 尺寸: {}x{} | 格式: {:?}",
+                            // "已处理 {} 帧 | 帧率: {:.2} FPS | 尺寸: {}x{} | 格式: {:?}",
+                            // frame_count,
+                            // frame_count as f64 / elapsed,
+                            // width,
+                            // height,
+                            // format
+                            "已处理 {} 帧 | 帧率: {:.2} FPS",
                             frame_count,
-                            frame_count as f64 / elapsed,
-                            width,
-                            height,
-                            format
+                            frame_count as f64 / elapsed
                         );
                     }
+
+                    // 冲洗解码器
+                    v_dctx.flush();
                 }
             }
         }
     }
-
-    // 冲洗解码器
-    v_dctx.flush();
 
     let elapsed = start_time.elapsed().as_secs_f64();
     if cfg.is_test {
@@ -136,12 +164,14 @@ async fn process_frame(
     stream_md5_val: &str,
     project_uuid: &str,
     organization_uuid: &str,
+    pts: i64, // 当前帧是播放到了第几秒
 ) -> Result<()> {
     // 获取帧的基本信息
     let width = frame.width();
     let height = frame.height();
 
     let mut rgb_frame = frame::Video::empty();
+    // let mut rgb_frame = frame::Video::new(format::Pixel::RGB8, width, height);
     scaler
         .run(frame, &mut rgb_frame)
         .context("帧格式转换失败")?;
@@ -182,6 +212,7 @@ async fn process_frame(
         project_uuid,
         organization_uuid,
         stream_md5_val,
+        pts,
     )
     .await?;
     // into_redis_pipe(cfg, &pf, rds).await?;
@@ -208,14 +239,15 @@ async fn to_predict_db(
     project_uuid: &str,
     organization_uuid: &str,
     stream_md5_val: &str,
+    pts: i64,
 ) -> Result<()> {
     let mut conn = SqliteConnection::connect(&cfg.db_path).await?;
     let sql = r#"
         insert into pic(
             path, stream_url, uuid,
             project_uuid, organization_uuid,
-            stream_md5
-        ) values(?,?,?,?,?,?)
+            stream_md5, pts
+        ) values(?,?,?,?,?,?,?)
     "#;
     let _ = sqlx::query(sql)
         .bind(pf_str)
@@ -224,6 +256,7 @@ async fn to_predict_db(
         .bind(project_uuid)
         .bind(organization_uuid)
         .bind(stream_md5_val)
+        .bind(pts)
         .execute(&mut conn)
         .await?;
 

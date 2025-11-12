@@ -7,6 +7,7 @@ create table if not exists pic (
     organization_uuid text not null default '',
     stream_md5 text not null default '',
     predicted integer not null default 0,
+    pts integer not null default 0,
     create_date text default (strftime('%Y-%m-%d %H:%M:%S', datetime('now', 'localtime')))
 );
 
@@ -20,7 +21,7 @@ create table if not exists predict (
     project_uuid text not null default '',
     organization_uuid text not null default '',
     stream_md5 text not null default '',
-    create_date text default (strftime('%Y-%m-%d %H:%M:%S', datetime('now', 'localtime')))
+    create_date text default (strftime('%Y-%m-%d %H:%M:%S', timestamp('now', 'localtime')))
 );
 
 create table if not exists stream (
@@ -31,6 +32,7 @@ create table if not exists stream (
     organization_uuid text not null default '',
     sn text not null default '',
     is_over integer not null default 0,
+    created_timestamp integer not null default (strftime('%s', datetime('now', 'localtime'))),
     create_date text default (strftime('%Y-%m-%d %H:%M:%S', datetime('now', 'localtime')))
 );
 
