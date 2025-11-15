@@ -26,7 +26,7 @@ def rtmp_frame_extract(
                     rtmp_url,
                     # rtsp_transport="tcp",  # RTMP 用 TCP 传输，减少丢包
                     # timeout=timeout,       # 超时时间
-                    # stimeout=timeout * 1000  # 网络超时（毫秒）Linux 可用
+                    # stimeout=timeout * 1000  # 网络超时（毫秒）Linux 也许可用
                 )
                 .filter("fps", fps=f"1/{frame_interval}")  # 按时间间隔抽帧（1帧/10秒）
                 .output(

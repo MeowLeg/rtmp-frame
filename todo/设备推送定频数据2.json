@@ -1,0 +1,182 @@
+{
+  "OrganizationUUID": "43d03d01-cf1c-4f2f-b2c8-033cda596489",
+  "biz_code": "device_osd",
+  "version": "1.0",
+  "data": {
+    "host": {
+      "99-0-0": {
+        "gimbal_pitch": 0, // 俯仰
+        "gimbal_roll": 0, // 横滚
+        "gimbal_yaw": 136.35734394357888, // 偏航
+        "measure_target_altitude": 28.80000114440918,
+        "measure_target_distance": 0,
+        "measure_target_error_state": 1,
+        "measure_target_latitude": 30.009570055032718,
+        "measure_target_longitude": 121.86779827722005,
+        "payload_index": "99-0-0",
+        "thermal_current_palette_style": 0,
+        "thermal_gain_mode": 2,
+        "thermal_global_temperature_max": 37.9585189819336,
+        "thermal_global_temperature_min": 33.2921371459961,
+        "thermal_isotherm_lower_limit": -20,
+        "thermal_isotherm_state": 0,
+        "thermal_isotherm_upper_limit": 150,
+        "zoom_factor": 0.5678233438485805
+      },
+      "activation_time": 1748293511,
+      "attitude_head": 134.4,
+      "attitude_pitch": 2,
+      "attitude_roll": 0.4,
+      "battery": {
+        "batteries": [
+          {
+            "capacity_percent": 65,
+            "firmware_version": "37.03.01.31",
+            "high_voltage_storage_days": 9,
+            "index": 0,
+            "loop_times": 13,
+            "sn": "87UPN3DCA000AH",
+            "sub_type": 0,
+            "temperature": 38.7,
+            "type": 0,
+            "voltage": 23776
+          }
+        ],
+        "capacity_percent": 65,
+        "landing_power": 7,
+        "remain_flight_time": 0,
+        "remain_job_time": 65535,
+        "return_home_power": 0
+      },
+      "best_link_gateway": "8UUXN4E00A05H3",
+      "cameras": [
+        {
+          "camera_mode": 0,
+          "ir_metering_mode": 0,
+          "ir_metering_point": {
+            "temperature": 37.25646209716797,
+            "x": 0.5,
+            "y": 0.5
+          },
+          "ir_zoom_factor": 2,
+          "liveview_world_region": {
+            "bottom": 0,
+            "left": 0,
+            "right": 1,
+            "top": 1
+          },
+          "payload_index": "99-0-0",
+          "photo_state": 0,
+          "photo_storage_settings": ["vision"],
+          "record_time": 0,
+          "recording_state": 0,
+          "remain_photo_num": 16236,
+          "remain_record_duration": 0,
+          "screen_split_enable": false,
+          "video_storage_settings": ["vision"],
+          "wide_calibrate_farthest_focus_value": 32,
+          "wide_calibrate_nearest_focus_value": 65,
+          "wide_exposure_mode": 1,
+          "wide_exposure_value": 16,
+          "wide_focus_mode": 2,
+          "wide_focus_state": 0,
+          "wide_focus_value": 32,
+          "wide_iso": 13,
+          "wide_max_focus_value": 98,
+          "wide_min_focus_value": 0,
+          "wide_shutter_speed": 36,
+          "zoom_calibrate_farthest_focus_value": 32,
+          "zoom_calibrate_nearest_focus_value": 65,
+          "zoom_exposure_mode": 1,
+          "zoom_exposure_value": 16,
+          "zoom_factor": 1,
+          "zoom_focus_mode": 2,
+          "zoom_focus_state": 0,
+          "zoom_focus_value": 32,
+          "zoom_iso": 13,
+          "zoom_max_focus_value": 98,
+          "zoom_min_focus_value": 0,
+          "zoom_shutter_speed": 36
+        }
+      ],
+      "country": "CN",
+      "distance_limit_status": {
+        "distance_limit": 5000,
+        "is_near_distance_limit": 0,
+        "state": 0
+      },
+      "elevation": 0,
+      "fts_info": {
+        "fts_firmware_version": "",
+        "fts_sn": "",
+        "fts_status": 65535,
+        "fts_timestamp": 0,
+        "fts_valid_duration": 0,
+        "fts_verification_code": ""
+      },
+      "gear": 1,
+      "height": 28.819007873535156,
+      "height_limit": 1500,
+      "home_distance": 0.0303317978978157,
+      "horizontal_speed": 0,
+      "is_near_area_limit": 1,
+      "is_near_height_limit": 0,
+      "latitude": 30.009570047626383,
+      "longitude": 121.86779827731488,
+      "maintain_status": {
+        "maintain_status_array": [
+          {
+            "last_maintain_flight_sorties": 0,
+            "last_maintain_flight_time": 0,
+            "last_maintain_time": 0,
+            "last_maintain_type": 1,
+            "state": 0
+          },
+          {
+            "last_maintain_flight_sorties": 0,
+            "last_maintain_flight_time": 0,
+            "last_maintain_time": 0,
+            "last_maintain_type": 2,
+            "state": 0
+          },
+          {
+            "last_maintain_flight_sorties": 0,
+            "last_maintain_flight_time": 0,
+            "last_maintain_time": 0,
+            "last_maintain_type": 3,
+            "state": 0
+          }
+        ]
+      },
+      "mode_code": 0,
+      "night_lights_state": 0,
+      "obstacle_avoidance": {
+        "downside": 1,
+        "horizon": 1,
+        "upside": 1
+      },
+      "position_state": {
+        "gps_number": 32,
+        "is_fixed": 2,
+        "quality": 5,
+        "rtk_number": 43
+      },
+      "rc_lost_action": 2,
+      "rid_state": true,
+      "rth_altitude": 120,
+      "storage": {
+        "total": 60382000,
+        "used": 2000
+      },
+      "total_flight_distance": 225236.8229729972,
+      "total_flight_sorties": 30,
+      "total_flight_time": 24362.479455456138,
+      "track_id": "",
+      "vertical_speed": 0,
+      "wind_direction": 0,
+      "wind_speed": 0
+    },
+    "sn": "1581F8HGX254W00A0C5Z"
+  },
+  "timestamp": 1749183788689
+}

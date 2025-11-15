@@ -34,8 +34,7 @@ pub async fn stream(
     // 创建缩放上下文，用于将YUV帧转换为RGB
 
     // 帧计数器和计时器
-    let mut frame_count: u32 = 0;
-    let start_time = Instant::now();
+    let mut frame_count: u128 = 0;
 
     let mut v_dctx = dctx.decoder().video()?;
     println!(
@@ -67,18 +66,20 @@ pub async fn stream(
     // .await?;
 
     // 处理输入包
+    let start_time = Instant::now();
+    // let mut loop_num = 0;
+    // loop {
     for (stream, packet) in ictx.packets() {
         if stream.index() == video_stream_index {
             // 时间戳
             // 将包发送到解码器
             match v_dctx.send_packet(&packet).context("发送数据包失败") {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     println!("发送数据包错误: {:?}", e);
                     continue;
                 }
             };
-
 
             // 从解码器接收帧
             let mut decoded_frame = frame::Video::empty();
@@ -91,11 +92,11 @@ pub async fn stream(
                 // let format = decoded_frame.format();
 
                 // 示例：打印帧信息
-                if frame_count.is_multiple_of(cfg.frame_interval_count) {
-                    let pts = decoded_frame.pts().unwrap_or(0);
-                    let timebase = stream.time_base();
-                    let timebase_num = timebase.numerator() as i64;
-                    let timebase_den = timebase.denominator() as i64;
+                if frame_count.is_multiple_of(cfg.frame_interval_count as u128) {
+                    // let pts = decoded_frame.pts().unwrap_or(0);
+                    // let timebase = stream.time_base();
+                    // let timebase_num = timebase.numerator() as i64;
+                    // let timebase_den = timebase.denominator() as i64;
 
                     // 自定义帧处理逻辑...
                     match process_frame(
@@ -108,10 +109,12 @@ pub async fn stream(
                         &stream_md5_val,
                         &project_uuid,
                         &organization_uuid,
-                        pts * timebase_num / timebase_den,
+                        // pts * timebase_num / timebase_den,
+                        10000 as i64,
                     )
-                    .await {
-                        Ok(_) => {},
+                    .await
+                    {
+                        Ok(_) => {}
                         Err(e) => {
                             println!("处理帧错误: {:?}", e);
                         }
@@ -132,13 +135,23 @@ pub async fn stream(
                             frame_count as f64 / elapsed
                         );
                     }
-
                     // 冲洗解码器
                     v_dctx.flush();
                 }
             }
+
+            // let elapsed = start_time.elapsed().as_secs_f64();
+            // if elapsed > 60.0 * (loop_num as f64 + 1.0) {
+            //     loop_num += 1;
+            //     println!("rth-1");
+            //     break;
+            // }
         }
     }
+
+    // println!("rth-2");
+    // ictx = format::input(&stream_url).context("无法打开RTMP流")?;
+    // }
 
     let elapsed = start_time.elapsed().as_secs_f64();
     if cfg.is_test {
@@ -156,7 +169,7 @@ pub async fn stream(
 async fn process_frame(
     scaler: &mut scaling::Context,
     frame: &frame::Video,
-    frame_count: u32,
+    frame_count: u128,
     cfg: &Config,
     // rds: &Client,
     stream_url: &str,

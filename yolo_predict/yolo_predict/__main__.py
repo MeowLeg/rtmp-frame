@@ -295,6 +295,17 @@ def predict_dir(codes: list[str]) -> None:
                 )
 
 
+def read_config():
+    with open("./config.toml", "rb") as f:
+        cfg: dict[str, Any] = tomli.load(f)  #  pyright: ignore[reportAny]
+        dataclass_prediction_list = []
+        for p in cfg["predict"]:
+            p["yolo"] = YOLO(p["model"])
+            dataclass_prediction_list.append(Prediction(**p))
+        cfg["predict"] = dataclass_prediction_list
+        return cfg
+
+
 def for_test():
     print("run to here 1")
 
